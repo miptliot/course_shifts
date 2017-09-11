@@ -16,7 +16,7 @@ from openedx.core.djangoapps.course_groups.models import CourseUserGroup, Course
 log = getLogger(__name__)
 
 
-def datenow():
+def date_now():
     return timezone.now().date()
 
 
@@ -25,7 +25,7 @@ class CourseShiftGroup(models.Model):
     Represents group of users with shifted due dates.
     It is based on CourseUserGroup. To ensure that
     every user is enrolled to the one shift only
-    CourseShiftMembership is used (just like for Cohorts).
+    CourseShiftMembership model is used (just like for CourseCohorts).
 
     Don't use this model's methods directly, they should be used by
     other models only. Direct usage can lead to the inconsistent
@@ -33,7 +33,7 @@ class CourseShiftGroup(models.Model):
     """
     course_user_group = models.OneToOneField(CourseUserGroup)
     start_date = models.DateField(
-        default=datenow,
+        default=date_now,
         db_index=True,
         help_text="Date when this shift started"
         )
@@ -42,19 +42,6 @@ class CourseShiftGroup(models.Model):
         default=0,
         help_text="Days to add to the block's due"
     )
-
-    def validate_unique(self, *args, **kwargs):
-        val = super(CourseShiftGroup, self).validate_unique(*args, **kwargs)
-        if not self.pk:
-            current_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
-            already_have_such_date = any([x.start_date == self.start_date for x in current_shifts])
-            if already_have_such_date:
-                raise ValidationError(
-                    "Shift for course {} with date {} already exists".format(
-                        str(self.course_key), str(self.start_date)
-                    )
-                )
-        return val
 
     @property
     def course_key(self):
@@ -70,13 +57,19 @@ class CourseShiftGroup(models.Model):
 
     @classmethod
     def get_course_shifts(cls, course_key):
+        """
+        Returns all shifts groups for given course
+        """
         if not isinstance(course_key, CourseKey):
             raise TypeError("course_key must be CourseKey, not {}".format(type(course_key)))
         return cls.objects.filter(course_user_group__course_id=course_key).order_by('-start_date')
 
     @classmethod
     def create(cls, name, course_key, start_date=None, days_shift=None):
-        """Creates new CourseShiftGroup"""
+        """
+        Creates new CourseShiftGroup.
+        If shift with (name, course_key) combination already exists returns this shift
+        """
         course_user_group, created = CourseUserGroup.create(name=name, course_id=course_key)
         kwargs = {"course_user_group": course_user_group}
         if start_date:
@@ -86,13 +79,31 @@ class CourseShiftGroup(models.Model):
         course_shift_group, created_shift = CourseShiftGroup.objects.get_or_create(**kwargs)
         return course_shift_group, created and created_shift
 
+    def validate_unique(self, *args, **kwargs):
+        """
+        Checks that course_key and date combination is unique.
+        Can't be set is constraint because course_key is taken
+        from ForeignKey
+        """
+        val = super(CourseShiftGroup, self).validate_unique(*args, **kwargs)
+        if not self.pk:
+            current_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
+            already_have_such_date = any([x.start_date == self.start_date for x in current_shifts])
+            if already_have_such_date:
+                raise ValidationError(
+                    "Shift for course {} with date {} already exists".format(
+                        str(self.course_key), str(self.start_date)
+                    )
+                )
+        return val
+
     def __unicode__(self):
         return u"'{}' in '{}'".format(self.name, str(self.course_key))
 
     def delete(self, *args, **kwargs):
-        course_group = self.course_user_group
+        group = self.course_user_group
         delete = super(CourseShiftGroup, self).delete(*args, **kwargs)
-        course_group.delete()
+        group.delete()
         return delete
 
     def save(self, *args, **kwargs):
@@ -112,24 +123,16 @@ class CourseShiftGroupMembership(models.Model):
     def course_key(self):
         return self.course_shift_group.course_key
 
-    def save(self, *args, **kwargs):
-        if self.pk:
-            raise ValueError("CourseShiftGroupMembership can't be changed, only deleted")
-        save = super(CourseShiftGroupMembership, self).save(*args, **kwargs)
-        if self.user not in self.course_shift_group.users.all():
-            self._add_user_with_membership(self.course_shift_group, self.user)
-        return save
-
-    def delete(self, *args, **kwargs):
-        delete = super(CourseShiftGroupMembership, self).delete(*args, **kwargs)
-        self._delete_user_without_membership(self.user, self.course_shift_group)
-        return delete
-
     @classmethod
     def get_user_membership(cls, user, course_key):
+        """
+        Returns CourseUserGroup for user and course if membership exists, else None
+        """
         all_memberships = cls.objects.filter(user=user)
         course_membership = all_memberships.filter(course_shift_group__course_user_group__course_id=course_key)
-        return course_membership.first()
+        membership = course_membership.first()
+        if membership:
+            return membership
 
     @classmethod
     def transfer_user(cls, user, course_shift_group_from, course_shift_group_to):
@@ -145,24 +148,27 @@ class CourseShiftGroupMembership(models.Model):
         if course_shift_group_from == course_shift_group_to:
             return
 
-        key = lambda x: str(x.course_key) if hasattr(x, "course_key") else None
+        key = lambda x: x.course_key if hasattr(x, "course_key") else None
 
+        key_from = key(course_shift_group_from)
+        key_to = key(course_shift_group_to)
         if course_shift_group_from and course_shift_group_to:
-            if key(course_shift_group_from) != key(course_shift_group_to):
+            if str(key_from) != str(key_to):
                 raise ValueError("Course groups have different course_key's: {} and {}".format(
-                    key(course_shift_group_from), key(course_shift_group_to)
+                    str(key_from), str(key_to)
                     )
                 )
 
-        current_course_key = key(course_shift_group_from) or key(course_shift_group_to)
+        current_course_key = key_from or key_to
         membership = cls.get_user_membership(user, current_course_key)
-        if membership != course_shift_group_from:
+        membership_group = membership and membership.course_shift_group
+
+        if membership_group != course_shift_group_from:
             raise ValueError("User's membership is '{}', not '{}'".format(
-                str(membership),
+                str(membership_group),
                 str(course_shift_group_from)
                 )
             )
-
         if membership:
             membership.delete()
 
@@ -170,33 +176,51 @@ class CourseShiftGroupMembership(models.Model):
             return cls.objects.create(user=user, course_shift_group=course_shift_group_to)
 
     @classmethod
-    def _add_user_with_membership(cls, course_shift_group, user):
-        """Adds users only when they are already have shift membership"""
-        try:
-            membership = CourseShiftGroupMembership.objects.get(user=user)
-        except CourseShiftGroupMembership.DoesNotExist:
-            raise IntegrityError("Membership for user {} not found".format(user.username))
-        if membership.course_shift_group != course_shift_group:
-            raise IntegrityError("Found membership for user {}, supposed to be {}".format(
-                membership.course_shift_group.name,
+    def _push_add_to_group(cls, course_shift_group, user):
+        """
+        Adds user to CourseShiftGroup if he has membership for this group or None.
+        """
+        membership = CourseShiftGroupMembership.get_user_membership(user=user, course_key=course_shift_group.course_key)
+        membership_group = membership and membership.course_shift_group
+
+        if membership_group and membership_group != course_shift_group:
+            raise IntegrityError("Found membership for user {}, supposed to be {} or None".format(
+                membership_group,
                 course_shift_group.name
             ))
+
         if user not in course_shift_group.users.all():
             course_shift_group.course_user_group.users.add(user)
 
     @classmethod
-    def _delete_user_without_membership(cls, user, course_shift_group):
-        """Deletes user from course_shift_group if he doesn't have membership."""
-        try:
-            membership = CourseShiftGroupMembership.objects.get(user=user)
-        except CourseShiftGroupMembership.DoesNotExist:
-            membership = None
-        if membership:
+    def _push_delete_from_group(cls, user, course_shift_group):
+        """
+        Deletes user from course_shift_group if he doesn't have membership.
+        """
+        membership = CourseShiftGroupMembership.get_user_membership(user=user, course_key=course_shift_group.course_key)
+        membership_group = membership and membership.course_shift_group
+
+        if membership_group:
             raise IntegrityError("Found membership for user {}, supposed to be None".format(
                 user.username,
-                membership.name
+                membership_group.name
             ))
+        if user not in course_shift_group.course_user_group.users.all():
+            raise IntegrityError("User {} is not in {}".format(user.username, course_shift_group.name))
         course_shift_group.course_user_group.users.remove(user)
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValueError("CourseShiftGroupMembership can't be changed, only deleted")
+        save = super(CourseShiftGroupMembership, self).save(*args, **kwargs)
+        if self.user not in self.course_shift_group.users.all():
+            self._push_add_to_group(self.course_shift_group, self.user)
+        return save
+
+    def delete(self, *args, **kwargs):
+        delete = super(CourseShiftGroupMembership, self).delete(*args, **kwargs)
+        self._push_delete_from_group(self.user, self.course_shift_group)
+        return delete
 
     def __unicode__(self):
         return u"'{}' in '{}'".format(
@@ -243,11 +267,6 @@ class CourseShiftSettings(models.Model):
         help_text="Days after start when student still can enroll"
     )
 
-    def __init__(self, *args, **kwargs):
-        super(CourseShiftSettings, self).__init__(*args, **kwargs)
-        # This attribute is used to clear all course shift plans when
-        # feature is turned off in course
-        self._original_is_shift_enabled = self.is_shift_enabled
 
     @property
     def last_start_date(self):
@@ -262,17 +281,27 @@ class CourseShiftSettings(models.Model):
         return course.start
 
     @classmethod
+    def get_course_settings(cls, course_key):
+        current_settings, created = cls.objects.get_or_create(course_key=course_key)
+        return current_settings
+
+    @classmethod
     def update_course_shift_groups(cls, course_key):
-        "Generate course shift group if necessary according to the settings"
+        """
+        Generates course shift group if necessary according to the settings.
+        """
         current_settings, created = cls.objects.get_or_create(course_key=course_key)
         if not current_settings.is_shift_enabled:
             return
 
         plan = None
+        # calculates when should be next shift started if 'is_autostart',
+        # else get next plan from CourseShiftPlannedRun
         if current_settings.is_autostart:
             last_date = current_settings.last_start_date
             next_start_date = last_date + timedelta(days=current_settings._autostart_period_days)
         else:
+
             course_shifts_plans = current_settings.plans.all().order_by('start_date')
             if not course_shifts_plans:
                 return
@@ -282,7 +311,7 @@ class CourseShiftSettings(models.Model):
         if next_start_date < timezone.now():
             days_add = int((next_start_date - current_settings.course_start_date).days)
             name = cls._naming(course_key, next_start_date)
-            group, create = CourseShiftGroup.create(
+            CourseShiftGroup.create(
                 course_key=course_key,
                 name=name,
                 days_shift=days_add,
@@ -290,7 +319,12 @@ class CourseShiftSettings(models.Model):
             )
             if plan:
                 plan.delete()
-            return group
+
+    def __init__(self, *args, **kwargs):
+        super(CourseShiftSettings, self).__init__(*args, **kwargs)
+        # This attribute is used to clear all course shift plans when
+        # feature is turned off in course
+        self._original_is_shift_enabled = self.is_shift_enabled
 
     @classmethod
     def _naming(cls, course_key, date):
@@ -300,11 +334,6 @@ class CourseShiftSettings(models.Model):
         if (not self.is_shift_enabled) and self._original_is_shift_enabled:
             CourseShiftPlannedRun.clear_course_shift_plans(self.course_key)
         return super(CourseShiftSettings, self).save(*args, **kwargs)
-
-    @classmethod
-    def get_course_settings(cls, course_key):
-        current_settings, created = cls.objects.get_or_create(course_key=course_key)
-        return current_settings
 
 
 class CourseShiftPlannedRun(models.Model):
