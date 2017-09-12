@@ -267,7 +267,6 @@ class CourseShiftSettings(models.Model):
         help_text="Days after start when student still can enroll"
     )
 
-
     @property
     def last_start_date(self):
         shifts = CourseShiftGroup.get_course_shifts(self.course_key)
@@ -278,76 +277,109 @@ class CourseShiftSettings(models.Model):
     @property
     def course_start_date(self):
         course = modulestore().get_course(self.course_key)
-        return course.start
+        return course.start.date()
 
     @classmethod
     def get_course_settings(cls, course_key):
         current_settings, created = cls.objects.get_or_create(course_key=course_key)
         return current_settings
 
-    @classmethod
-    def update_course_shift_groups(cls, course_key):
-        """
-        Generates course shift group if necessary according to the settings.
-        """
-        current_settings, created = cls.objects.get_or_create(course_key=course_key)
-        if not current_settings.is_shift_enabled:
-            return
+    def update_shifts(self):
+        plan = self.get_next_plan()
+        is_updated = False
+        while plan:
+            is_updated = True
+            name = self._naming(self.course_key, plan.start_date)
+            days_add = int((plan.start_date - self.course_start_date).days)
+            plan.launch_shift(name=name, days_add=days_add)
+            plan = self.get_next_plan()
+        return is_updated
 
-        plan = None
-        # calculates when should be next shift started if 'is_autostart',
-        # else get next plan from CourseShiftPlannedRun
-        if current_settings.is_autostart:
-            last_date = current_settings.last_start_date
-            next_start_date = last_date + timedelta(days=current_settings._autostart_period_days)
+    def get_next_plan(self):
+        if not self.is_shift_enabled:
+            return None
+        if self.is_autostart:
+            plan = self._get_next_autostart_plan()
         else:
+            plan = self._get_next_manual_plan()
+        return plan
 
-            course_shifts_plans = current_settings.plans.all().order_by('start_date')
-            if not course_shifts_plans:
-                return
-            plan = course_shifts_plans[0]
-            next_start_date = plan.start_date
+    def _get_next_autostart_plan(self):
+        last_date = self.last_start_date
+        next_start_date = last_date + timedelta(days=self.autostart_period_days)
+        now_time = date_now()
+        if next_start_date > now_time:
+            return None
+        return CourseShiftPlannedRun.get_mocked_plan(self, next_start_date)
 
-        if next_start_date < timezone.now():
-            days_add = int((next_start_date - current_settings.course_start_date).days)
-            name = cls._naming(course_key, next_start_date)
-            CourseShiftGroup.create(
-                course_key=course_key,
-                name=name,
-                days_shift=days_add,
-                start_date=next_start_date
-            )
-            if plan:
-                plan.delete()
-
-    def __init__(self, *args, **kwargs):
-        super(CourseShiftSettings, self).__init__(*args, **kwargs)
-        # This attribute is used to clear all course shift plans when
-        # feature is turned off in course
-        self._original_is_shift_enabled = self.is_shift_enabled
+    def _get_next_manual_plan(self):
+        course_shifts_plans = self.plans.all().order_by('start_date')
+        if not course_shifts_plans:
+            return False
+        return course_shifts_plans.first()
 
     @classmethod
     def _naming(cls, course_key, date):
         return "shift_{}_{}".format(str(course_key), str(date))
 
-    def save(self, *args, **kwargs):
-        if (not self.is_shift_enabled) and self._original_is_shift_enabled:
-            CourseShiftPlannedRun.clear_course_shift_plans(self.course_key)
-        return super(CourseShiftSettings, self).save(*args, **kwargs)
+    def create_plan(self, start_date):
+        created, plan = CourseShiftPlannedRun.objects.get_or_create(
+            course_shift_settings=self,
+            start_date=start_date,
+        )
+        return plan
 
 
 class CourseShiftPlannedRun(models.Model):
     """
-    Represents planned shift for course. Used
-    only when course shift dates are set up manually(not 'is_autostart')
+    Represents planned shift for course. Real plans are stored
+    in db and user only when new shifts are generated manually('is_autostart'=False)
+    Also used as a mock for autostart to keep same syntax
     """
     course_shift_settings = models.ForeignKey(
         CourseShiftSettings,
         related_name="plans")
     start_date = models.DateField(default=timezone.now)
 
+    class Meta:
+        unique_together = ('course_shift_settings', 'start_date',)
+
+    MOCKING_FLAG = "mocking_flag"
+
+    @classmethod
+    def get_mocked_plan(cls, settings, start_date):
+        """
+        Returns mocked plan for autostart mode. It can be launched,
+        but doesn't hit database in any way
+        """
+        mock = cls(course_shift_settings=settings, start_date=start_date)
+        setattr(mock, cls.MOCKING_FLAG, True)
+        mock.delete = lambda: None
+        mock.save = lambda: None
+        return mock
+
     @classmethod
     def clear_course_shift_plans(cls, course_key):
         plans = cls.objects.filter(course_shift_settings__course_key=course_key)
         for x in plans:
             x.delete()
+
+    @classmethod
+    def get_course_plans(cls, course_key):
+        return cls.objects.filter(course_shift_settings__course_key=course_key)
+
+    def launch_shift(self, name, days_add):
+        """
+        Launches shift according to plan and self-destructs
+        """
+        shift, created = CourseShiftGroup.create(
+            course_key=self.course_shift_settings.course_key,
+            name=name,
+            days_shift=days_add,
+            start_date=self.start_date
+        )
+        self.delete()
+        return shift
+
+    def __unicode__(self):
+        return u"{} for {}".format(str(self.start_date), str(self.course_shift_settings.course_key))
