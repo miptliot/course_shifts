@@ -55,6 +55,17 @@ class CourseShiftGroup(models.Model):
     def name(self):
         return self.course_user_group.name
 
+    def get_due(self, user, block):
+        if not block.due:
+            return
+
+        if user not in self.users.all():
+            raise ValueError("User {} is not in shift {}".format(
+                user.username,
+                str(self)
+            ))
+        return block.due + timedelta(days=self.days_shift)
+
     @classmethod
     def get_course_shifts(cls, course_key):
         """
