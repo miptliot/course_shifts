@@ -9,7 +9,7 @@ from opaque_keys.edx.locations import SlashSeparatedCourseKey
 from student.tests.factories import UserFactory, RegistrationFactory, UserProfileFactory
 from xmodule.modulestore.tests.django_utils import TEST_DATA_MIXED_MODULESTORE, ModuleStoreTestCase
 from xmodule.modulestore.tests.factories import ToyCourseFactory
-from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from ..models import CourseShiftGroup, CourseShiftGroupMembership, CourseUserGroup, CourseShiftSettings, CourseShiftPlannedRun
 from ..manager import CourseShiftUserManager
 
@@ -105,10 +105,8 @@ class TestCourseShifts(ModuleStoreTestCase):
         """
         test_shift_group, created = CourseShiftGroup.create("test_shift_group", self.course_key)
 
-        with self.assertRaises(ValidationError) as context_manager:
+        with self.assertRaises(IntegrityError) as context_manager:
             test_shift_group2, created = CourseShiftGroup.create("test_shift_group2", self.course_key)
-        exception_msg_parts = ("Shift for course", "with date", "already exists")
-        self.assertTrue(all(x in str(context_manager.exception) for x in exception_msg_parts))
 
         # when try to create group shift with same (name, key, date) already exists we get that old shift
         test_shift_group_same, created = CourseShiftGroup.create("test_shift_group", self.course_key)

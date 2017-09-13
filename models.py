@@ -32,20 +32,21 @@ class CourseShiftGroup(models.Model):
     state of shifts.
     """
     course_user_group = models.OneToOneField(CourseUserGroup)
+    course_key = CourseKeyField(
+        max_length=255,
+        db_index=True,
+        help_text="Which course is this group associated with")
     start_date = models.DateField(
         default=date_now,
-        db_index=True,
-        help_text="Date when this shift started"
+        help_text="Date when this shift starts"
         )
-
     days_shift = models.IntegerField(
         default=0,
         help_text="Days to add to the block's due"
     )
 
-    @property
-    def course_key(self):
-        return self.course_user_group.course_id
+    class Meta:
+        unique_together = ('course_key', 'start_date',)
 
     @property
     def users(self):
@@ -73,7 +74,7 @@ class CourseShiftGroup(models.Model):
         """
         if not isinstance(course_key, CourseKey):
             raise TypeError("course_key must be CourseKey, not {}".format(type(course_key)))
-        return cls.objects.filter(course_user_group__course_id=course_key).order_by('-start_date')
+        return cls.objects.filter(course_key=course_key).order_by('-start_date')
 
     @classmethod
     def create(cls, name, course_key, start_date=None, days_shift=None):
@@ -81,44 +82,33 @@ class CourseShiftGroup(models.Model):
         Creates new CourseShiftGroup.
         If shift with (name, course_key) combination already exists returns this shift
         """
-        course_user_group, created = CourseUserGroup.create(name=name, course_id=course_key)
+        course_user_group, created_group = CourseUserGroup.create(name=name, course_id=course_key)
         kwargs = {"course_user_group": course_user_group}
         if start_date:
             kwargs["start_date"] = start_date
         if days_shift:
             kwargs["days_shift"] = days_shift
+        kwargs['course_key'] = course_key
         course_shift_group, created_shift = CourseShiftGroup.objects.get_or_create(**kwargs)
-        return course_shift_group, created and created_shift
-
-    def validate_unique(self, *args, **kwargs):
-        """
-        Checks that course_key and date combination is unique.
-        Can't be set is constraint because course_key is taken
-        from ForeignKey
-        """
-        val = super(CourseShiftGroup, self).validate_unique(*args, **kwargs)
-        if not self.pk:
-            current_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
-            already_have_such_date = any([x.start_date == self.start_date for x in current_shifts])
-            if already_have_such_date:
-                raise ValidationError(
-                    "Shift for course {} with date {} already exists".format(
-                        str(self.course_key), str(self.start_date)
-                    )
-                )
-        return val
+        is_created = created_group and created_shift
+        return course_shift_group, is_created
 
     def __unicode__(self):
         return u"'{}' in '{}'".format(self.name, str(self.course_key))
 
     def delete(self, *args, **kwargs):
-        group = self.course_user_group
-        delete = super(CourseShiftGroup, self).delete(*args, **kwargs)
-        group.delete()
-        return delete
+        #group = self.course_user_group
+        #delete_result = super(CourseShiftGroup, self).delete(*args, **kwargs)
+        #group.delete()
+        self.course_user_group.delete()
+        return super(CourseShiftGroup, self).delete(*args, **kwargs)
 
     def save(self, *args, **kwargs):
-        self.validate_unique()
+        if self.course_key != self.course_user_group.course_id:
+            raise ValidationError("Different course keys in shift and user group: {}, {}".format(
+                str(self.course_key),
+                str(self.course_user_group.course_id)
+            ))
         return super(CourseShiftGroup, self).save(*args, **kwargs)
 
 
@@ -140,10 +130,11 @@ class CourseShiftGroupMembership(models.Model):
         Returns CourseUserGroup for user and course if membership exists, else None
         """
         all_memberships = cls.objects.filter(user=user)
-        course_membership = all_memberships.filter(course_shift_group__course_user_group__course_id=course_key)
-        membership = course_membership.first()
-        if membership:
-            return membership
+        try:
+            course_membership = cls.objects.get(user=user, course_shift_group__course_key=course_key)
+        except cls.DoesNotExist:
+            course_membership = None
+        return course_membership
 
     @classmethod
     def transfer_user(cls, user, course_shift_group_from, course_shift_group_to):
@@ -189,7 +180,7 @@ class CourseShiftGroupMembership(models.Model):
     @classmethod
     def _push_add_to_group(cls, course_shift_group, user):
         """
-        Adds user to CourseShiftGroup if he has membership for this group or None.
+        Adds user to CourseShiftGroup if he has membership for this group or doesn't have membership.
         """
         membership = CourseShiftGroupMembership.get_user_membership(user=user, course_key=course_shift_group.course_key)
         membership_group = membership and membership.course_shift_group
@@ -264,18 +255,23 @@ class CourseShiftSettings(models.Model):
     autostart_period_days = models.IntegerField(
         default=28,
         db_column='autostart_period_days',
-        help_text="Period of generated groups",
+        help_text="Number of days between new automatically generated shifts."\
+            "Used only in autostart mode.",
         null=True
         )
 
     enroll_before_days = models.IntegerField(
         default=14,
-        help_text="Days before start when student can enroll already"
+        help_text="Days before shift start when student can enroll already."\
+        "E.g. if shift start 20.01.2020 and value is 5 shift will be available"\
+        "from 15.01.2020"
     )
 
     enroll_after_days = models.IntegerField(
         default=7,
-        help_text="Days after start when student still can enroll"
+        help_text="Days after shift start when student still can enroll." \
+        "E.g. if shift start 20.01.2020 and value is 10 shift will be available" \
+        "till 30.01.2020"
     )
 
     @property
@@ -296,6 +292,11 @@ class CourseShiftSettings(models.Model):
         return current_settings
 
     def update_shifts(self):
+        """
+        Checks current date and creates new shifts if necessary
+        according to the settings
+        :return: if new shifts were created
+        """
         plan = self.get_next_plan()
         is_updated = False
         while plan:
@@ -307,6 +308,10 @@ class CourseShiftSettings(models.Model):
         return is_updated
 
     def get_next_plan(self):
+        """
+        Returns closest CourseShiftPlannedRun or None if
+        feature is turned off or no plans available currently
+        """
         if not self.is_shift_enabled:
             return None
         if self.is_autostart:
@@ -331,6 +336,9 @@ class CourseShiftSettings(models.Model):
 
     @classmethod
     def _naming(cls, course_key, date):
+        """
+        Defines how should be shifts named
+        """
         return "shift_{}_{}".format(str(course_key), str(date))
 
     def create_plan(self, start_date):
@@ -381,7 +389,7 @@ class CourseShiftPlannedRun(models.Model):
 
     def launch_shift(self, name, days_add):
         """
-        Launches shift according to plan and self-destructs
+        Launches shift according to plan and then self-destructs
         """
         shift, created = CourseShiftGroup.create(
             course_key=self.course_shift_settings.course_key,

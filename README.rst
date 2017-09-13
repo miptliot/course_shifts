@@ -1,6 +1,8 @@
 Description
 -----------
-This is django app for OpenEdx that should provide the way for student to move forward all due dates for given course according to the rules defined by the course staff.
+This is django app based on OpenEdx Ficus release `"open-release/ficus.2"
+<https://github.com/edx/edx-platform/tree/open-release/ficus.2>`_
+that should provide the way for student to move forward all due dates for given course according to the rules defined by the course staff.
 Similar feature at the Coursera is called "Session Switch": when activated, course has several sessions with the same content but different deadlines and student can switch them at will. This feature can be useful when student have missed some deadlines but still wants to
 finish the course and get credit.
 
