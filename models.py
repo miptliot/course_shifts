@@ -361,7 +361,7 @@ class CourseShiftPlannedRun(models.Model):
     def get_mocked_plan(cls, settings, start_date):
         """
         Returns mocked plan for autostart mode. It can be launched,
-        but doesn't hit database in any way
+        but doesn't hit database at deletion
         """
         mock = cls(course_shift_settings=settings, start_date=start_date)
         setattr(mock, cls.MOCKING_FLAG, True)
