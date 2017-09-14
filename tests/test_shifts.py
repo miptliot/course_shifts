@@ -11,7 +11,7 @@ from xmodule.modulestore.tests.django_utils import TEST_DATA_MIXED_MODULESTORE, 
 from xmodule.modulestore.tests.factories import ToyCourseFactory
 from django.db import IntegrityError
 from ..models import CourseShiftGroup, CourseShiftGroupMembership, CourseUserGroup, CourseShiftSettings, CourseShiftPlannedRun
-from ..manager import CourseShiftUserManager
+from ..manager import CourseShiftManager
 
 def date_shifted(days):
     return (datetime.datetime.now() + datetime.timedelta(days=days)).date()
@@ -156,13 +156,15 @@ class TestCourseShifts(ModuleStoreTestCase):
         # user doesn't have shift, but transfer from test_shift_group
         with self.assertRaises(ValueError) as context_manager:
             CourseShiftGroupMembership.transfer_user(user, test_shift_group, test_shift_group2)
-        message_right = list(x in str(context_manager.exception) for x in ["User's membership is", "test_shift_group", "not"])
+        message_list = ["User's membership is", "test_shift_group", "not"]
+        message_right = list(x in str(context_manager.exception) for x in message_list)
         self.assertTrue(all(message_right), "Message:{}".format(str(context_manager.exception), message_right))
 
         # user doesn't have shift, but transfer from None
         with self.assertRaises(ValueError) as context_manager:
             CourseShiftGroupMembership.transfer_user(user, test_shift_group, None)
-        message_right = list(x in str(context_manager.exception) for x in ["User's membership is", "None", "not"])
+        message_list = ["User's membership is", "None", "not"]
+        message_right = list(x in str(context_manager.exception) for x in message_list)
         self.assertTrue(all(message_right), "Message:{}".format(str(context_manager.exception), message_right))
 
         CourseShiftGroupMembership.transfer_user(user, None, test_shift_group)
@@ -170,7 +172,8 @@ class TestCourseShifts(ModuleStoreTestCase):
         # user has shift test_shift_group, but transfer from test_shift_group2
         with self.assertRaises(ValueError) as context_manager:
             CourseShiftGroupMembership.transfer_user(user, test_shift_group2, test_shift_group)
-        message_right = list(x in str(context_manager.exception) for x in ["User's membership is", "test_shift_group", "not"])
+        message_list = ["User's membership is", "test_shift_group", "not"]
+        message_right = list(x in str(context_manager.exception) for x in message_list)
         self.assertTrue(all(message_right), "Message:{}".format(str(context_manager.exception), message_right))
 
         fake_key = SlashSeparatedCourseKey('a', 'b', 'c')
@@ -366,7 +369,8 @@ class TestCourseShiftSettings(ModuleStoreTestCase):
         settings.update_shifts()
 
         course_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
-        self.assertTrue(len(course_shifts) == 0, "Course shifts shouldn't be generated, found:{}".format(str(course_shifts)))
+        mes = "Course shifts shouldn't be generated, found:{}".format(str(course_shifts))
+        self.assertTrue(len(course_shifts) == 0, mes)
 
     def test_manual_generation_one(self):
         """
@@ -419,7 +423,7 @@ class TestCourseShiftManager(ModuleStoreTestCase):
         Tests method get_user_course_shift
         """
         user = UserFactory(username="test", email="a@b.com")
-        shift_manager = CourseShiftUserManager(course_key=self.course_key)
+        shift_manager = CourseShiftManager(course_key=self.course_key)
         shift_group = shift_manager.get_user_course_shift(user, self.course_key)
         self.assertTrue(shift_group is None, "User shift group is {}, should be None".format(str(shift_group)))
 
@@ -433,7 +437,7 @@ class TestCourseShiftManager(ModuleStoreTestCase):
 
         self.shift_settings.is_shift_enabled = False
         self.shift_settings.save()
-        shift_manager = CourseShiftUserManager(self.course_key)
+        shift_manager = CourseShiftManager(self.course_key)
         shift_group = shift_manager.get_user_course_shift(user, self.course_key)
         self.assertTrue(shift_group is None, "User shift group is {}, should be None".format(str(shift_group)))
 
@@ -446,7 +450,7 @@ class TestCourseShiftManager(ModuleStoreTestCase):
         """
         Tests method get_active_shifts
         """
-        shift_manager = CourseShiftUserManager(self.course_key)
+        shift_manager = CourseShiftManager(self.course_key)
         course_shifts = shift_manager.get_active_shifts()
         self.assertTrue(len(course_shifts) == 0, "Must be zero shift groups, found:{}".format(str(course_shifts)))
 
@@ -476,7 +480,7 @@ class TestCourseShiftManager(ModuleStoreTestCase):
         Valid scenarios
         """
         user = UserFactory(username="test", email="a@b.com")
-        shift_manager = CourseShiftUserManager(course_key=self.course_key)
+        shift_manager = CourseShiftManager(course_key=self.course_key)
         shift_group = shift_manager.get_user_course_shift(user, self.course_key)
         self.assertTrue(shift_group is None, "User shift group is {}, should be None".format(str(shift_group)))
 
@@ -490,7 +494,13 @@ class TestCourseShiftManager(ModuleStoreTestCase):
             str(group1)
         ))
 
-        shift_manager.sign_user_on_shift(user, shift_to=group2, shift_from=group1, course_key=self.course_key, shift_up_only=False)
+        shift_manager.sign_user_on_shift(
+            user=user,
+            shift_to=group2,
+            shift_from=group1,
+            course_key=self.course_key,
+            shift_up_only=False
+        )
         shift_group = shift_manager.get_user_course_shift(user, self.course_key)
         self.assertTrue(shift_group == group2, "User shift group is {}, should be {}".format(
             str(shift_group),
@@ -516,7 +526,7 @@ class TestCourseShiftManager(ModuleStoreTestCase):
         second_course_key = second_course.id
 
         user = UserFactory(username="test", email="a@b.com")
-        shift_manager = CourseShiftUserManager(course_key=self.course_key)
+        shift_manager = CourseShiftManager(course_key=self.course_key)
         shift_group = shift_manager.get_user_course_shift(user, self.course_key)
         self.assertTrue(shift_group is None, "User shift group is {}, should be None".format(str(shift_group)))
 
@@ -533,7 +543,12 @@ class TestCourseShiftManager(ModuleStoreTestCase):
         shift_manager.sign_user_on_shift(user, group1, course_key=self.course_key)
 
         with self.assertRaises(ValueError) as context_manager:
-            shift_manager.sign_user_on_shift(user, shift_from=group1, shift_to=group_invalid, course_key=second_course_key)
+            shift_manager.sign_user_on_shift(
+                user=user,
+                shift_from=group1,
+                shift_to=group_invalid,
+                course_key=second_course_key
+            )
         exception_msg_parts = ("Shift_from's  course_key:", "given course_key:")
         self.assertTrue(all(x in str(context_manager.exception) for x in exception_msg_parts))
 

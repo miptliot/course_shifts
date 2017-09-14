@@ -9,7 +9,7 @@ date_now = lambda: timezone.now().date()
 log = getLogger(__name__)
 
 
-class CourseShiftUserManager(object):
+class CourseShiftManager(object):
     """
     Provides the interface to perform operations on users and
     course shifts: user transfer between shifts, due date calculation,

@@ -24,7 +24,7 @@ class CourseShiftGroup(models.Model):
     """
     Represents group of users with shifted due dates.
     It is based on CourseUserGroup. To ensure that
-    every user is enrolled to the one shift only
+    every user is enrolled in the one shift only
     CourseShiftMembership model is used (just like for CourseCohorts).
 
     Don't use this model's methods directly, they should be used by
@@ -61,7 +61,7 @@ class CourseShiftGroup(models.Model):
             return
 
         if user not in self.users.all():
-            raise ValueError("User {} is not in shift {}".format(
+            raise ValueError("User '{}' is not in shift '{}'".format(
                 user.username,
                 str(self)
             ))
@@ -97,18 +97,18 @@ class CourseShiftGroup(models.Model):
         return u"'{}' in '{}'".format(self.name, str(self.course_key))
 
     def delete(self, *args, **kwargs):
-        #group = self.course_user_group
-        #delete_result = super(CourseShiftGroup, self).delete(*args, **kwargs)
-        #group.delete()
+        log.info("Shift group is deleted: {}".format(str(self)))
         self.course_user_group.delete()
         return super(CourseShiftGroup, self).delete(*args, **kwargs)
 
     def save(self, *args, **kwargs):
         if self.course_key != self.course_user_group.course_id:
-            raise ValidationError("Different course keys in shift and user group: {}, {}".format(
+            raise ValidationError("Different course keys in shift and user group: '{}' and '{}'".format(
                 str(self.course_key),
                 str(self.course_user_group.course_id)
             ))
+        if not self.pk:
+            log.info("New shift group is created: '{}'".format(str(self)))
         return super(CourseShiftGroup, self).save(*args, **kwargs)
 
 
@@ -129,7 +129,6 @@ class CourseShiftGroupMembership(models.Model):
         """
         Returns CourseUserGroup for user and course if membership exists, else None
         """
-        all_memberships = cls.objects.filter(user=user)
         try:
             course_membership = cls.objects.get(user=user, course_shift_group__course_key=course_key)
         except cls.DoesNotExist:
@@ -140,7 +139,7 @@ class CourseShiftGroupMembership(models.Model):
     def transfer_user(cls, user, course_shift_group_from, course_shift_group_to):
         """
         Transfers user from one shift to another one. If the first one is None,
-        user is enrolled to the 'course_shift_group_to'. If the last one
+        user is enrolled in the 'course_shift_group_to'. If the last one
         is None, user is unenrolled from shift 'course_shift_group_from'
         """
 
@@ -156,7 +155,7 @@ class CourseShiftGroupMembership(models.Model):
         key_to = key(course_shift_group_to)
         if course_shift_group_from and course_shift_group_to:
             if str(key_from) != str(key_to):
-                raise ValueError("Course groups have different course_key's: {} and {}".format(
+                raise ValueError("Course groups have different course_key's: '{}' and '{}'".format(
                     str(key_from), str(key_to)
                     )
                 )
@@ -173,7 +172,6 @@ class CourseShiftGroupMembership(models.Model):
             )
         if membership:
             membership.delete()
-
         if course_shift_group_to:
             return cls.objects.create(user=user, course_shift_group=course_shift_group_to)
 
@@ -214,15 +212,22 @@ class CourseShiftGroupMembership(models.Model):
     def save(self, *args, **kwargs):
         if self.pk:
             raise ValueError("CourseShiftGroupMembership can't be changed, only deleted")
-        save = super(CourseShiftGroupMembership, self).save(*args, **kwargs)
+        save_result = super(CourseShiftGroupMembership, self).save(*args, **kwargs)
+        log.info("User '{}' is enrolled in shift '{}'".format(
+            self.user.username,
+            str(self.course_shift_group))
+        )
         if self.user not in self.course_shift_group.users.all():
             self._push_add_to_group(self.course_shift_group, self.user)
-        return save
+        return save_result
 
     def delete(self, *args, **kwargs):
-        delete = super(CourseShiftGroupMembership, self).delete(*args, **kwargs)
+        log.info("User '{}' is unenrolled from shift '{}'".format(
+            self.user.username,
+            str(self.course_shift_group))
+        )
+        super(CourseShiftGroupMembership, self).delete(*args, **kwargs)
         self._push_delete_from_group(self.user, self.course_shift_group)
-        return delete
 
     def __unicode__(self):
         return u"'{}' in '{}'".format(
@@ -233,18 +238,17 @@ class CourseShiftGroupMembership(models.Model):
 
 class CourseShiftSettings(models.Model):
     """
-    Describes how should course shifts be run for
-    course session.
+    Describes Course Shift settings for start and due dates in the specific course run.
     """
     course_key = CourseKeyField(
         max_length=255,
         db_index=True,
         unique=True,
-        )
+    )
 
     is_shift_enabled = models.BooleanField(
         default=False,
-        help_text="Is feature enabled for course"
+        help_text="True value if this feature is enabled for the course run"
     )
 
     is_autostart = models.BooleanField(
@@ -263,19 +267,22 @@ class CourseShiftSettings(models.Model):
     enroll_before_days = models.IntegerField(
         default=14,
         help_text="Days before shift start when student can enroll already."\
-        "E.g. if shift start 20.01.2020 and value is 5 shift will be available"\
-        "from 15.01.2020"
+        "E.g. if shift starts at 01/20/2020 and value is 5 then shift will be"\
+        "available from 01/15/2020."
     )
 
     enroll_after_days = models.IntegerField(
         default=7,
         help_text="Days after shift start when student still can enroll." \
-        "E.g. if shift start 20.01.2020 and value is 10 shift will be available" \
-        "till 30.01.2020"
+        "E.g. if shift starts at 01/20/2020 and value is 10 then shift will be" \
+        "available till 01/20/2020"
     )
 
     @property
     def last_start_date(self):
+        """
+        Date when the last shift was started.
+        """
         shifts = CourseShiftGroup.get_course_shifts(self.course_key)
         if not shifts:
             return self.course_start_date
@@ -289,6 +296,10 @@ class CourseShiftSettings(models.Model):
     @classmethod
     def get_course_settings(cls, course_key):
         current_settings, created = cls.objects.get_or_create(course_key=course_key)
+        if created:
+            log.info("Settings for {} are created".format(
+                str(course_key)
+            ))
         return current_settings
 
     def update_shifts(self):
@@ -305,7 +316,22 @@ class CourseShiftSettings(models.Model):
             days_add = int((plan.start_date - self.course_start_date).days)
             plan.launch_shift(name=name, days_add=days_add)
             plan = self.get_next_plan()
+        if is_updated:
+            log.info(
+                "Shifts for course '{}' are updated".format(str(self.course_key))
+            )
         return is_updated
+
+    def create_plan(self, start_date, launch_plan=False):
+        """
+        Creates plan with given start date.
+        There is no check that shift are in manual mode
+        """
+        created, plan = CourseShiftPlannedRun.objects.get_or_create(
+            course_shift_settings=self,
+            start_date=start_date,
+        )
+        return plan
 
     def get_next_plan(self):
         """
@@ -341,19 +367,14 @@ class CourseShiftSettings(models.Model):
         """
         return "shift_{}_{}".format(str(course_key), str(date))
 
-    def create_plan(self, start_date):
-        created, plan = CourseShiftPlannedRun.objects.get_or_create(
-            course_shift_settings=self,
-            start_date=start_date,
-        )
-        return plan
-
 
 class CourseShiftPlannedRun(models.Model):
     """
-    Represents planned shift for course. Real plans are stored
-    in db and user only when new shifts are generated manually('is_autostart'=False)
-    Also used as a mock for autostart to keep same syntax
+    Represents planned shift for course.
+    Plan can be launched, then it creates the shift and disappears.
+    For 'autostart' mode in settings mocked plans can be created:
+    they can be launched, but they are not stored in db and don't hit
+    it at plan deletion.
     """
     course_shift_settings = models.ForeignKey(
         CourseShiftSettings,
@@ -378,12 +399,6 @@ class CourseShiftPlannedRun(models.Model):
         return mock
 
     @classmethod
-    def clear_course_shift_plans(cls, course_key):
-        plans = cls.objects.filter(course_shift_settings__course_key=course_key)
-        for x in plans:
-            x.delete()
-
-    @classmethod
     def get_course_plans(cls, course_key):
         return cls.objects.filter(course_shift_settings__course_key=course_key)
 
@@ -391,11 +406,18 @@ class CourseShiftPlannedRun(models.Model):
         """
         Launches shift according to plan and then self-destructs
         """
+
         shift, created = CourseShiftGroup.create(
             course_key=self.course_shift_settings.course_key,
             name=name,
             days_shift=days_add,
             start_date=self.start_date
+        )
+        log.info(
+            "Shift plan {} is launched as shift {}".format(
+                str(self),
+                str(shift)
+            )
         )
         self.delete()
         return shift
