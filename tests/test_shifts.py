@@ -18,7 +18,7 @@ def date_shifted(days):
 
 
 @attr(shard=2)
-class TestCourseShifts(ModuleStoreTestCase):
+class TestCourseShiftGroup(ModuleStoreTestCase):
     """
     Test the course shifts feature
     """
@@ -28,222 +28,296 @@ class TestCourseShifts(ModuleStoreTestCase):
         """
         Make sure that course is reloaded every time--clear out the modulestore.
         """
-        super(TestCourseShifts, self).setUp()
+        super(TestCourseShiftGroup, self).setUp()
         date = datetime.datetime.now()
         self.course = ToyCourseFactory.create(start=date)
         self.course_key = self.course.id
 
-    def date_shifted(self, shift):
-        return (datetime.datetime.now() + datetime.timedelta(days=shift)).date()
-
-    def test_shift_group_creation(self):
+    def _no_groups_check(self):
         """
-        Tests shifts groups creation and .get_course_shifts method.
-        Valid scenarios.
+        Checks that there is no groups.
+        Used at start and anywhere needed
         """
-        groups = CourseShiftGroup.get_course_shifts(self.course_key)
+        groups = CourseUserGroup.objects.filter(course_id=self.course_key)
         self.assertTrue(
             len(groups) == 0,
-            "Course has shift groups at creation"
+            "Course has user groups at start"
+        )
+        shift_groups = CourseShiftGroup.get_course_shifts(self.course_key)
+        self.assertTrue(
+            len(shift_groups) == 0,
+            "Course has shift groups at start"
         )
 
+    def _delete_all_shifts(self, key=None):
+        if not key:
+            key = self.course_key
+        shift_groups = CourseShiftGroup.get_course_shifts(key)
+        for x in shift_groups:
+            x.delete()
+
+    def test_creates_cug(self):
+        """
+        Checks that CourseUserGroup is created when CSG created
+        """
+        self._no_groups_check()
+
+        name = "test_shift_group"
+        test_shift_group, created = CourseShiftGroup.create(name, self.course_key)
+
+        groups = CourseUserGroup.objects.filter(course_id=self.course_key)
+        correct = len(groups) == 1 and groups.first().name == name
+        self.assertTrue(correct, "Should be only 'test_shift_group' user group, found:{}".format(
+            str([x.name for x in groups])
+        ))
+
+        shift_groups = CourseShiftGroup.get_course_shifts(self.course_key)
+        correct = len(shift_groups) == 1 and test_shift_group in shift_groups
+        self.assertTrue(
+            correct,
+            "Should be only {}, found:{}".format(
+                str(test_shift_group),
+                str(shift_groups)
+        ))
+
+        self._delete_all_shifts()
+
+    def test_deletes_cug(self):
+        """
+        Checks that CourseUserGroup us deleted hen CSG deleted
+        """
+        self._no_groups_check()
         test_shift_group, created = CourseShiftGroup.create("test_shift_group", self.course_key)
-        groups = CourseShiftGroup.get_course_shifts(self.course_key)
-        self.assertTrue(
-            len(groups) == 1,
-            "Course has {} shifts, must have 1".format(len(groups))
-        )
-        self.assertTrue(
-            test_shift_group in groups,
-            "Created group is not in course shifts:'{}' not in '{}'".format(
-                str(test_shift_group),(str(groups))
-            )
-        )
-
         test_shift_group.delete()
-        groups = CourseShiftGroup.get_course_shifts(self.course_key)
-        self.assertTrue(
-            len(groups) == 0,
-            "Course has shift groups after group deletion"
-        )
+        self._no_groups_check()
 
-    def test_shift_group_deletion(self):
+    def test_deleted_by_cug_delete(self):
         """
-        Tests shifts groups deletion and .get_course_shifts method.
-        Valid scenarios.
+        Checks that CourseShiftGroup is deleted when CourseUserGroup is deleted
         """
-
-        # create shift, check user
+        self._no_groups_check()
         test_shift_group, created = CourseShiftGroup.create("test_shift_group", self.course_key)
-        course_user_groups = CourseUserGroup.objects.all()
-        self.assertTrue(
-            len(course_user_groups) == 1,
-            "Group was not created: {}".format(str(course_user_groups))
-        )
-
-        # delete user, check shift
         test_shift_group.course_user_group.delete()
-        course_shift_groups = CourseShiftGroup.get_course_shifts(self.course_key)
-        self.assertTrue(
-            len(course_shift_groups) == 0,
-            "More than zero course shift groups after deletion: {}".format(str(course_shift_groups))
-        )
+        self._no_groups_check()
 
-        # create shift, delete shift, check user
-        test_shift_group, created = CourseShiftGroup.create("test_shift_group", self.course_key)
-        test_shift_group.delete()
-        course_user_groups = CourseUserGroup.objects.all()
-        self.assertTrue(
-            len(course_user_groups) == 0,
-            "Group was not deleted: {}".format(str(course_user_groups))
-        )
-
-    def test_shift_creation_errors(self):
+    def test_create_same_course_and_date_error(self):
         """
-        Tests behavior of CourseShiftGroup.create in case of
-        incorrect course_key, name conflict
+        Checks that error raised for CSG creation with same course_key and
+        start_date, BUT DIFFERENT name
         """
+        self._no_groups_check()
         test_shift_group, created = CourseShiftGroup.create("test_shift_group", self.course_key)
 
         with self.assertRaises(IntegrityError) as context_manager:
             test_shift_group2, created = CourseShiftGroup.create("test_shift_group2", self.course_key)
+        self._delete_all_shifts()
 
-        # when try to create group shift with same (name, key, date) already exists we get that old shift
-        test_shift_group_same, created = CourseShiftGroup.create("test_shift_group", self.course_key)
-        self.assertFalse(created)
-        self.assertTrue(test_shift_group.pk == test_shift_group_same.pk)
-        test_shift_group.delete()
+    def test_create_same_course_dif_date_ok(self):
+        """
+        Checks that error NOT raised for CSG creation with same course_key
+        but different date
+        """
+        self._no_groups_check()
+        test_shift_group, created = CourseShiftGroup.create("test_shift_group", self.course_key)
+        test_shift_group2, created = CourseShiftGroup.create("test_shift_group2", self.course_key,
+                                                             start_date=date_shifted(1))
+        groups = CourseShiftGroup.get_course_shifts(self.course_key)
+        correct = test_shift_group2 in groups and \
+            test_shift_group in groups and \
+            len(groups) == 2
+
+        self.assertTrue(correct, "Should be test_shift_group and test_shift_group2, found:{}".format(
+            str(groups)
+        ))
+        self._delete_all_shifts()
+
+    def test_create_same_course_and_date_copy(self):
+        """
+        Checks that copy returned for CSG creation with same course_key and
+        start_date, AND SAME name
+        """
+        self._no_groups_check()
+        name = "test_shift_group"
+        test_shift_group, created = CourseShiftGroup.create(name, self.course_key)
+        test_shift_group2, created2 = CourseShiftGroup.create(name, self.course_key)
+
+        self.assertFalse(created2, "shift groups should be same: {}".format(
+            str(test_shift_group),
+            str(test_shift_group2)
+        ))
+        self._delete_all_shifts()
+
+    def test_same_name_different_date_error(self):
+        """
+        Checks that error raised for CSG creation with same course_key and name,
+        but different start_date
+        """
+        self._no_groups_check()
+        name = "test_shift_group"
+        test_shift_group, created = CourseShiftGroup.create(name, self.course_key)
+        with self.assertRaises(IntegrityError) as context_manager:
+            test_shift_group2, created2 = CourseShiftGroup.create(name, self.course_key, start_date=date_shifted(1))
+        self._delete_all_shifts()
+
+
+@attr(shard=2)
+class TestCourseShiftGroupMembership(ModuleStoreTestCase):
+    MODULESTORE = TEST_DATA_MIXED_MODULESTORE
+
+    def setUp(self):
+        """
+        Make sure that course is reloaded every time--clear out the modulestore.
+        """
+        super(TestCourseShiftGroupMembership, self).setUp()
+        date = datetime.datetime.now()
+        self.course = ToyCourseFactory.create(start=date)
+        self.course_key = self.course.id
+        self.user = UserFactory(username="test", email="a@b.com")
+        self.group, created = CourseShiftGroup.create("test_shift_group", self.course_key)
+
+        self.second_course = ToyCourseFactory.create(org="neworg")
+        self.second_course_key = self.second_course.id
+
+    def _delete_all_memberships(self):
+        memberships = CourseShiftGroupMembership.objects.all()
+        for m in memberships:
+            m.delete()
+
+    def _check_no_memberships(self):
+        mems = CourseShiftGroupMembership.objects.all()
+        self.assertTrue(len(mems) == 0)
 
     def test_membership_creation(self):
         """
-        Tests shifts membership creation and deletion.
-        Valid scenarios only.
+        Tests shifts transfer to group pushes user to CourseShiftGroup
         """
-        test_shift_group, created = CourseShiftGroup.create("test_shift_group", self.course_key)
-        user = UserFactory(username="test", email="a@b.com")
+        membership = CourseShiftGroupMembership.transfer_user(self.user, None, self.group)
+        self.assertTrue(self.user in self.group.users.all())
+        self._delete_all_memberships()
 
-        CourseShiftGroupMembership.transfer_user(user, None, test_shift_group)
-        self.assertTrue(user in test_shift_group.users.all())
-
-        CourseShiftGroupMembership.transfer_user(user, test_shift_group, None)
-        self.assertTrue(len(test_shift_group.users.all()) == 0)
-
-        date = datetime.datetime.now() + datetime.timedelta(days=7)
-        test_shift_group2, created = CourseShiftGroup.create("test_shift_group2", self.course_key, start_date=date)
-        CourseShiftGroupMembership.transfer_user(user, None, test_shift_group2)
-        CourseShiftGroupMembership.transfer_user(user, test_shift_group2, test_shift_group)
-
-        self.assertTrue(
-            (user in test_shift_group.users.all()),
-            "User wasn't transfered:{}".format(str(CourseShiftGroupMembership.objects.all()))
-        )
-        self.assertTrue(
-            (len(test_shift_group2.users.all())==0),
-            "test_shift_group2 is not empty:{}".format(str(test_shift_group2.users.all()))
-        )
-        test_shift_group.delete()
-        test_shift_group2.delete()
-
-    def test_membership_errors(self):
+    def test_membership_deletion(self):
         """
-        Tests transfer_user method versus wrong shift groups
+        Tests membership deletion and transfer to None removes user from Group
         """
-        test_shift_group, created = CourseShiftGroup.create("test_shift_group", self.course_key)
-        test_shift_group2, created = CourseShiftGroup.create("test_shift_group2", self.course_key,
-                                                             start_date=date_shifted(days=10))
+        membership = CourseShiftGroupMembership.transfer_user(self.user, None, self.group)
+        membership.delete()
+        self.assertTrue(len(self.group.users.all()) == 0)
 
-        user = UserFactory(username="test", email="a@b.com")
-        # user doesn't have shift, but transfer from test_shift_group
+        membership = CourseShiftGroupMembership.transfer_user(self.user, None, self.group)
+        CourseShiftGroupMembership.transfer_user(self.user, self.group, None)
+        self.assertTrue(len(self.group.users.all()) == 0)
+
+    def test_membership_course_user_unique(self):
+        """
+        Tests that there can't be two membership for user in same course_key
+        """
+        group2, created = CourseShiftGroup.create("test_shift_group2", self.course_key,
+            start_date=date_shifted(1))
+        CourseShiftGroupMembership.transfer_user(self.user, None, self.group)
         with self.assertRaises(ValueError) as context_manager:
-            CourseShiftGroupMembership.transfer_user(user, test_shift_group, test_shift_group2)
-        message_list = ["User's membership is", "test_shift_group", "not"]
-        message_right = list(x in str(context_manager.exception) for x in message_list)
-        self.assertTrue(all(message_right), "Message:{}".format(str(context_manager.exception), message_right))
+            CourseShiftGroupMembership.objects.create(user=self.user, course_shift_group=group2)
+        group2.delete()
+        self._delete_all_memberships()
 
-        # user doesn't have shift, but transfer from None
+    def test_user_membership_two_courses(self):
+        """
+        Tests that user can have two memberships in two different courses
+        """
+        group2, created = CourseShiftGroup.create("test_shift_group", self.second_course_key)
+        membership = CourseShiftGroupMembership.transfer_user(self.user, None, self.group)
+        membership2 = CourseShiftGroupMembership.transfer_user(self.user, None, group2)
+        mems = CourseShiftGroupMembership.objects.all()
+        self.assertTrue(len(mems) == 2, "Must be 2 memberships, found: {}".format(
+            str(mems)
+        ))
+        self._delete_all_memberships()
+
+    def test_two_users_for_course_membership(self):
+        """
+        Tests that there can be two users in CourseShiftGroup
+        """
+        user2 = UserFactory(username="test2", email="a2@b.com")
+        membership = CourseShiftGroupMembership.transfer_user(self.user, None, self.group)
+        membership = CourseShiftGroupMembership.transfer_user(user2, None, self.group)
+        mems = CourseShiftGroupMembership.objects.all()
+        self.assertTrue(len(mems) == 2, "Must be 2 memberships, found: {}".format(
+            str(mems)
+        ))
+        self._delete_all_memberships()
+
+    def test_membership_unchangable(self):
+        """
+        Tests that membership can't be changed
+        """
+        membership = CourseShiftGroupMembership.transfer_user(self.user, None, self.group)
+        group2, created = CourseShiftGroup.create("test_shift_group2", self.second_course_key)
+        membership.course_shift_group = group2
+        with self.assertRaises(ValueError):
+            membership.save()
+        group2.delete()
+        self._delete_all_memberships()
+
+    def test_membership_transfer_valid(self):
+        """
+        Tests transfer from None, to shift group from the same course, to None
+        """
+        self.assertTrue(len(self.group.users.all()) == 0)
+
+        membership = CourseShiftGroupMembership.transfer_user(self.user, None, self.group)
+        self.assertTrue(self.user in self.group.users.all())
+
+        group2, created = CourseShiftGroup.create("test_shift_group2", self.course_key, start_date=date_shifted(1))
+        membership = CourseShiftGroupMembership.transfer_user(self.user, self.group, group2)
+        self.assertTrue(self.user in group2.users.all())
+        self.assertTrue(len(self.group.users.all()) == 0)
+
+        membership = CourseShiftGroupMembership.transfer_user(self.user, group2, None)
+        self.assertTrue(len(self.group.users.all()) == 0)
+        self.assertTrue(len(group2.users.all()) == 0)
+        group2.delete()
+
+    def test_transfer_intercourse_error(self):
+        """
+        Tests user can't be transfered between to the shift from
+        the different course
+        """
+        group2, created = CourseShiftGroup.create("test_shift_group2", self.second_course_key)
+        membership = CourseShiftGroupMembership.transfer_user(self.user, None, self.group)
+        with self.assertRaises(ValueError):
+            membership = CourseShiftGroupMembership.transfer_user(self.user, self.group, group2)
+        group2.delete()
+
+    def test_transfer_from_error(self):
+        """
+        Tests that transfer raises error when shift_from is incorrect
+        """
+        group2, created = CourseShiftGroup.create("test_shift_group2", self.course_key, start_date=date_shifted(1))
+
         with self.assertRaises(ValueError) as context_manager:
-            CourseShiftGroupMembership.transfer_user(user, test_shift_group, None)
+            membership = CourseShiftGroupMembership.transfer_user(self.user, self.group, group2)
         message_list = ["User's membership is", "None", "not"]
         message_right = list(x in str(context_manager.exception) for x in message_list)
-        self.assertTrue(all(message_right), "Message:{}".format(str(context_manager.exception), message_right))
+        self.assertTrue(all(message_right), "Message:{}".format(str(context_manager.exception)))
 
-        CourseShiftGroupMembership.transfer_user(user, None, test_shift_group)
+        membership = CourseShiftGroupMembership.transfer_user(self.user, None, self.group)
 
-        # user has shift test_shift_group, but transfer from test_shift_group2
         with self.assertRaises(ValueError) as context_manager:
-            CourseShiftGroupMembership.transfer_user(user, test_shift_group2, test_shift_group)
-        message_list = ["User's membership is", "test_shift_group", "not"]
+            membership = CourseShiftGroupMembership.transfer_user(self.user, group2, None)
+        message_list = ["User's membership is", "test_shift_group2", "test_shift_group", "not"]
         message_right = list(x in str(context_manager.exception) for x in message_list)
-        self.assertTrue(all(message_right), "Message:{}".format(str(context_manager.exception), message_right))
+        self.assertTrue(all(message_right), "Message:{}".format(str(context_manager.exception)))
 
-        fake_key = SlashSeparatedCourseKey('a', 'b', 'c')
-        fake_shift_group, created = CourseShiftGroup.create("fake_shift_group", fake_key)
+        self._delete_all_memberships()
 
-        # transfer from one course to other
-        with self.assertRaises(ValueError) as context_manager:
-            CourseShiftGroupMembership.transfer_user(user, test_shift_group, fake_shift_group)
-        message_right = list(x in str(context_manager.exception) for x in ["Course groups have different course_key"])
-        self.assertTrue(all(message_right), "Message:{}".format(str(context_manager.exception), message_right))
+    def test_get_user_membership(self):
+        membership = CourseShiftGroupMembership.get_user_membership(self.user, self.course_key)
+        self.assertIsNone(membership)
 
-        test_shift_group.delete()
-        test_shift_group2.delete()
-        fake_shift_group.delete()
-
-    def test_several_courses_conflicts(self):
-        """Tests several memberships in different courses"""
-        second_course = ToyCourseFactory.create(org="neworg")
-        second_course_key = second_course.id
-
-        test_a_shift_group, created = CourseShiftGroup.create("test_A_shift_group", self.course_key)
-        test_a_shift_group2, created = CourseShiftGroup.create("test_A_shift_group2", self.course_key,
-                                                               start_date=date_shifted(days=10))
-
-        test_b_shift_group, created = CourseShiftGroup.create("test_B_shift_group", second_course_key)
-        test_b_shift_group2, created = CourseShiftGroup.create("test_B_shift_group2", second_course_key,
-                                                               start_date=date_shifted(days=10))
-
-        user = UserFactory(username="test", email="a@b.com")
-
-        membership_a = CourseShiftGroupMembership.get_user_membership(user, course_key=self.course_key)
-        membership_b = CourseShiftGroupMembership.get_user_membership(user, course_key=second_course_key)
-        self.assertTrue(membership_a is None, "User's membership:{}, should be None".format(str(membership_a)))
-        self.assertTrue(membership_b is None, "User's membership:{}, should be None".format(str(membership_b)))
-
-        CourseShiftGroupMembership.transfer_user(user, None, test_a_shift_group)
-        CourseShiftGroupMembership.transfer_user(user, None, test_b_shift_group)
-        membership_a = CourseShiftGroupMembership.get_user_membership(user, course_key=self.course_key)
-        membership_b = CourseShiftGroupMembership.get_user_membership(user, course_key=second_course_key)
-        group_1 = membership_a and membership_a.course_shift_group
-        group_2 = membership_b and membership_b.course_shift_group
-        self.assertTrue(group_1 == test_a_shift_group, "User's membership {}, should be {}".format(
-            str(group_1),
-            str(test_a_shift_group)
-        ))
-        self.assertTrue(group_2 == test_b_shift_group, "User's membership {}, should be {}".format(
-            str(group_1),
-            str(test_b_shift_group)
-        ))
-
-        CourseShiftGroupMembership.transfer_user(user, test_a_shift_group, test_a_shift_group2)
-        CourseShiftGroupMembership.transfer_user(user, test_b_shift_group, test_b_shift_group2)
-        membership_a = CourseShiftGroupMembership.get_user_membership(user, course_key=self.course_key)
-        membership_b = CourseShiftGroupMembership.get_user_membership(user, course_key=second_course_key)
-        group_1 = membership_a and membership_a.course_shift_group
-        group_2 = membership_b and membership_b.course_shift_group
-        self.assertTrue(group_1 == test_a_shift_group2, "User's membership {}, should be {}".format(
-            str(group_1),
-            str(test_a_shift_group2)
-        ))
-        self.assertTrue(group_2 == test_b_shift_group2, "User's membership {}, should be {}".format(
-            str(group_1),
-            str(test_b_shift_group2)
-        ))
-        CourseShiftGroupMembership.transfer_user(user, test_a_shift_group2, None)
-        CourseShiftGroupMembership.transfer_user(user, test_b_shift_group2, None)
-        test_a_shift_group.delete()
-        test_a_shift_group2.delete()
-        test_b_shift_group.delete()
-        test_b_shift_group2.delete()
+        CourseShiftGroupMembership.transfer_user(self.user, None, self.group)
+        membership = CourseShiftGroupMembership.get_user_membership(self.user, self.course_key)
+        self.assertTrue(membership.course_shift_group == self.group, "Membershift group:{}".format(
+            str(membership.course_shift_group)
+            ))
 
 
 @attr(shard=2)
@@ -277,7 +351,8 @@ class TestCourseShiftSettings(ModuleStoreTestCase):
         """
         Tests that settings got by get_course_settings saved correctly
         """
-        settings = self._settings_setup()
+        self._settings_setup()
+        settings = CourseShiftSettings.get_course_settings(self.course_key)
 
         self.assertTrue(settings.is_shift_enabled == True)
         self.assertTrue(settings.is_autostart == True)

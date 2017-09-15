@@ -23,7 +23,7 @@ class CourseShiftManager(object):
     @property
     def is_shift_enabled(self):
         return self.settings.is_shift_enabled
-
+    
     def get_user_course_shift(self, user, course_key):
         """
         Returns user's shift group for given course.
@@ -103,4 +103,3 @@ class CourseShiftManager(object):
             ))
 
         return CourseShiftGroupMembership.transfer_user(user, group_from, shift_to)
-

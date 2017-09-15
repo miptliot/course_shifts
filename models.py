@@ -56,16 +56,16 @@ class CourseShiftGroup(models.Model):
     def name(self):
         return self.course_user_group.name
 
-    def get_due(self, user, block):
-        if not block.due:
+    def get_shifted_due(self, user, block, name):
+        value = getattr(block, name)
+        if not value:
             return
-
         if user not in self.users.all():
             raise ValueError("User '{}' is not in shift '{}'".format(
                 user.username,
                 str(self)
             ))
-        return block.due + timedelta(days=self.days_shift)
+        return value + timedelta(days=self.days_shift)
 
     @classmethod
     def get_course_shifts(cls, course_key):
@@ -129,6 +129,8 @@ class CourseShiftGroupMembership(models.Model):
         """
         Returns CourseUserGroup for user and course if membership exists, else None
         """
+        if not course_key:
+            raise ValueError("Got course_key {}".format(str(course_key)))
         try:
             course_membership = cls.objects.get(user=user, course_shift_group__course_key=course_key)
         except cls.DoesNotExist:
@@ -149,17 +151,15 @@ class CourseShiftGroupMembership(models.Model):
         if course_shift_group_from == course_shift_group_to:
             return
 
-        key = lambda x: x.course_key if hasattr(x, "course_key") else None
+        key_from = course_shift_group_from and course_shift_group_from.course_key
+        key_to = course_shift_group_to and course_shift_group_to.course_key
 
-        key_from = key(course_shift_group_from)
-        key_to = key(course_shift_group_to)
         if course_shift_group_from and course_shift_group_to:
             if str(key_from) != str(key_to):
                 raise ValueError("Course groups have different course_key's: '{}' and '{}'".format(
                     str(key_from), str(key_to)
                     )
                 )
-
         current_course_key = key_from or key_to
         membership = cls.get_user_membership(user, current_course_key)
         membership_group = membership and membership.course_shift_group
@@ -212,6 +212,11 @@ class CourseShiftGroupMembership(models.Model):
     def save(self, *args, **kwargs):
         if self.pk:
             raise ValueError("CourseShiftGroupMembership can't be changed, only deleted")
+        current_membership = self.get_user_membership(self.user, self.course_key)
+        if current_membership:
+            raise ValueError("User already has membership for this course: {}".format(
+                str(current_membership)
+            ))
         save_result = super(CourseShiftGroupMembership, self).save(*args, **kwargs)
         log.info("User '{}' is enrolled in shift '{}'".format(
             self.user.username,
