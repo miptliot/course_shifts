@@ -67,6 +67,25 @@ class CourseShiftGroup(models.Model):
             ))
         return value + timedelta(days=self.days_shift)
 
+    def get_enrollment_limits(self, shift_settings=None):
+        """
+        Return tuple of enrollment start and end dates
+        """
+        if not shift_settings:
+            shift_settings = CourseShiftSettings.get_course_settings(self.course_key)
+        return (
+            self.start_date - timedelta(days=shift_settings.enroll_before_days),
+            self.start_date + timedelta(days=shift_settings.enroll_after_days)
+        )
+
+    def is_enrollable_now(self, shift_settings=None):
+        if not shift_settings:
+            shift_settings = CourseShiftSettings.get_course_settings(self.course_key)
+        date_start, date_end = self.get_enrollment_limits(shift_settings)
+        if date_start < date_now() < date_end:
+            return True
+        return False
+
     @classmethod
     def get_course_shifts(cls, course_key):
         """
@@ -261,7 +280,7 @@ class CourseShiftSettings(models.Model):
         help_text="Are groups generated automatically with period "
                   "or according to the manually set plan")
 
-    autostart_period_days = models.IntegerField(
+    autostart_period_days = models.PositiveIntegerField(
         default=28,
         db_column='autostart_period_days',
         help_text="Number of days between new automatically generated shifts."\
@@ -269,19 +288,23 @@ class CourseShiftSettings(models.Model):
         null=True
         )
 
-    enroll_before_days = models.IntegerField(
+    enroll_before_days = models.PositiveIntegerField(
         default=14,
         help_text="Days before shift start when student can enroll already."\
         "E.g. if shift starts at 01/20/2020 and value is 5 then shift will be"\
         "available from 01/15/2020."
     )
 
-    enroll_after_days = models.IntegerField(
+    enroll_after_days = models.PositiveIntegerField(
         default=7,
         help_text="Days after shift start when student still can enroll." \
         "E.g. if shift starts at 01/20/2020 and value is 10 then shift will be" \
         "available till 01/20/2020"
     )
+
+    def __init__(self, *args, **kwargs):
+        super(CourseShiftSettings, self).__init__(*args, **kwargs)
+        self._update_shifts_autostart()
 
     @property
     def last_start_date(self):
@@ -290,7 +313,7 @@ class CourseShiftSettings(models.Model):
         """
         shifts = CourseShiftGroup.get_course_shifts(self.course_key)
         if not shifts:
-            return self.course_start_date
+            return None
         return shifts[0].start_date
 
     @property
@@ -307,125 +330,56 @@ class CourseShiftSettings(models.Model):
             ))
         return current_settings
 
-    def update_shifts(self):
+    def build_name(self, **kwargs):
         """
-        Checks current date and creates new shifts if necessary
-        according to the settings
-        :return: if new shifts were created
-        """
-        plan = self.get_next_plan()
-        is_updated = False
-        while plan:
-            is_updated = True
-            name = self._naming(self.course_key, plan.start_date)
-            days_add = int((plan.start_date - self.course_start_date).days)
-            plan.launch_shift(name=name, days_add=days_add)
-            plan = self.get_next_plan()
-        if is_updated:
-            log.info(
-                "Shifts for course '{}' are updated".format(str(self.course_key))
-            )
-        return is_updated
-
-    def create_plan(self, start_date, launch_plan=False):
-        """
-        Creates plan with given start date.
-        There is no check that shift are in manual mode
-        """
-        created, plan = CourseShiftPlannedRun.objects.get_or_create(
-            course_shift_settings=self,
-            start_date=start_date,
-        )
-        return plan
-
-    def get_next_plan(self):
-        """
-        Returns closest CourseShiftPlannedRun or None if
-        feature is turned off or no plans available currently
-        """
-        if not self.is_shift_enabled:
-            return None
-        if self.is_autostart:
-            plan = self._get_next_autostart_plan()
-        else:
-            plan = self._get_next_manual_plan()
-        return plan
-
-    def _get_next_autostart_plan(self):
-        last_date = self.last_start_date
-        next_start_date = last_date + timedelta(days=self.autostart_period_days)
-        now_time = date_now()
-        if next_start_date > now_time:
-            return None
-        return CourseShiftPlannedRun.get_mocked_plan(self, next_start_date)
-
-    def _get_next_manual_plan(self):
-        course_shifts_plans = self.plans.all().order_by('start_date')
-        if not course_shifts_plans:
-            return False
-        return course_shifts_plans.first()
-
-    @classmethod
-    def _naming(cls, course_key, date):
-        """
+        :param start_date
         Defines how should be shifts named
         """
-        return "shift_{}_{}".format(str(course_key), str(date))
+        date = kwargs.get("start_date")
+        return "shift_{}_{}".format(str(self.course_key), str(date))
 
+    def calculate_days_add(self, start_date):
+        return int((start_date - self.course_start_date).days)
 
-class CourseShiftPlannedRun(models.Model):
-    """
-    Represents planned shift for course.
-    Plan can be launched, then it creates the shift and disappears.
-    For 'autostart' mode in settings mocked plans can be created:
-    they can be launched, but they are not stored in db and don't hit
-    it at plan deletion.
-    """
-    course_shift_settings = models.ForeignKey(
-        CourseShiftSettings,
-        related_name="plans")
-    start_date = models.DateField(default=timezone.now)
-
-    class Meta:
-        unique_together = ('course_shift_settings', 'start_date',)
-
-    MOCKING_FLAG = "mocking_flag"
-
-    @classmethod
-    def get_mocked_plan(cls, settings, start_date):
+    def get_next_autostart_date(self):
         """
-        Returns mocked plan for autostart mode. It can be launched,
-        but doesn't hit database at deletion
+        In autostart mode returns date when next shift starts
+        In manual mode returns None
         """
-        mock = cls(course_shift_settings=settings, start_date=start_date)
-        setattr(mock, cls.MOCKING_FLAG, True)
-        mock.delete = lambda: None
-        mock.save = lambda: None
-        return mock
+        if not self.is_autostart:
+            return
+        if not self.last_start_date:
+            return self.course_start_date
+        return self.last_start_date + timedelta(days=self.autostart_period_days)
 
-    @classmethod
-    def get_course_plans(cls, course_key):
-        return cls.objects.filter(course_shift_settings__course_key=course_key)
-
-    def launch_shift(self, name, days_add):
+    def _calculate_launch_date(self, start_date):
         """
-        Launches shift according to plan and then self-destructs
+        Returns date when shift with given start date
+        should be launched. Now it is created at the moment of
+        enrollment start, but it can be changed in future
         """
+        return start_date - timedelta(days=self.enroll_before_days)
 
-        shift, created = CourseShiftGroup.create(
-            course_key=self.course_shift_settings.course_key,
-            name=name,
-            days_shift=days_add,
-            start_date=self.start_date
-        )
-        log.info(
-            "Shift plan {} is launched as shift {}".format(
-                str(self),
-                str(shift)
+    def _update_shifts_autostart(self):
+        """
+        Creates new shifts if required by autostart settings
+        """
+        start_date = self.get_next_autostart_date()
+        if not start_date:
+            return
+        launch_date = self._calculate_launch_date(start_date)
+        while launch_date < date_now():
+            name = self.build_name(start_date=start_date)
+            days_shift = self.calculate_days_add(start_date=start_date)
+
+            group, created = CourseShiftGroup.create(
+                name=name,
+                start_date=start_date,
+                days_shift=days_shift,
+                course_key=self.course_key
             )
-        )
-        self.delete()
-        return shift
+            if created:
+                log.info("Shift {} automatically created".format(str(group)))
+            start_date = self.get_next_autostart_date()
+            launch_date = self._calculate_launch_date(start_date)
 
-    def __unicode__(self):
-        return u"{} for {}".format(str(self.start_date), str(self.course_shift_settings.course_key))

@@ -23,8 +23,8 @@ class CourseShiftManager(object):
     @property
     def is_shift_enabled(self):
         return self.settings.is_shift_enabled
-    
-    def get_user_course_shift(self, user, course_key):
+
+    def get_user_shift(self, user, course_key):
         """
         Returns user's shift group for given course.
         """
@@ -35,71 +35,84 @@ class CourseShiftManager(object):
         if membership:
             return membership.course_shift_group
 
-    def get_active_shifts(self, date_threshold=None):
+    def get_all_shifts(self):
+        return CourseShiftGroup.get_course_shifts(self.course_key)
+
+    def get_active_shifts(self, user=None):
         """
-        Returns shifts that are are active at this moment according to the settings.
-        date_threshold add additional filter for shifts start date against threshold
-        (e.g. for user switching shift to the newer shift)
+        Returns shifts that are are active at this moment according to the settings,
+        i.e. enrollment have started but haven't finished yet.
+        If user is given and he has membership all started shifts are considered
+        as active
         """
         if not self.settings.is_shift_enabled:
             return []
-        current_date = date_now()
         all_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
         if not all_shifts:
             return []
 
+        now = date_now()
         active_shifts = []
+        current_start_date = None
+        if user:
+            current_group = self.get_user_shift(user, self.course_key)
+            current_start_date = current_group and current_group.start_date
+
         for shift in all_shifts:
-            enroll_finish = shift.start_date + timedelta(days=self.settings.enroll_after_days)
             enroll_start = shift.start_date - timedelta(days=self.settings.enroll_before_days)
-            if not(enroll_start < current_date < enroll_finish):
-                continue
-            if date_threshold and shift.start_date < date_threshold:
-                continue
-            active_shifts.append(shift)
+            enroll_finish = shift.start_date + timedelta(days=self.settings.enroll_after_days)
+            if current_start_date and current_start_date < shift.start_date:
+                enroll_finish = now
+
+            if enroll_start < now <= enroll_finish:
+                active_shifts.append(shift)
+
         return active_shifts
 
-    def sign_user_on_shift(self, user, shift_to, course_key, shift_from=None, forced=False, shift_up_only=True):
+    def sign_user_on_shift(self, user, shift, course_key):
         """
         Transfers user to given shift group. User's enrollment is not checked
         because at course enrollment user should be firstly transfered to shift and
         only then enrolled on course.
-        If forced, then user unenrolled from current course shift automatically,
-        otherwise user mustn't have any current shift membership
         :param user: user to enroll on shift
-        :param shift_to: CourseShiftGroup to enroll
-        :param course_key: to which course shift_to (and shif_from if not None) belongs
-        :param forced: unenroll from current shift if shift_from is not given
-        :param shift_up_only: allow to change only on later shifts
+        :param shift: CourseShiftGroup to enroll
+        :param course_key: to which course shift_to (and shift_from if not None) belongs
         """
-        if shift_to.course_key != course_key:
+        if shift.course_key != course_key:
             raise ValueError("Shift's course_key: '{}', given course_key:'{}'".format(
-                str(shift_to.course_key),
-                str(course_key)
-            ))
-        if shift_from and shift_from.course_key != course_key:
-            raise ValueError("Shift_from's  course_key: '{}', given course_key:'{}'".format(
-                str(shift_from.course_key),
+                str(shift.course_key),
                 str(course_key)
             ))
 
         membership = CourseShiftGroupMembership.get_user_membership(user=user, course_key=course_key)
-        group_from = membership and membership.course_shift_group
-        if group_from == shift_to:
+        shift_from = membership and membership.course_shift_group
+        if shift_from == shift:
             return membership
 
-        if not forced and group_from != shift_from:
-            raise ValueError("User's membership for given course is not None:{}".format(str(membership)))
-
-        date_threshold = shift_from and shift_from.start_date
-        if not shift_up_only:
-            date_threshold = None
-
-        active_shifts = self.get_active_shifts(date_threshold=date_threshold)
-        if shift_to not in active_shifts:
+        active_shifts = self.get_active_shifts(user)
+        if shift not in active_shifts:
             raise ValueError("Shift {} is not in active shifts: {}".format(
-                str(shift_to),
+                str(shift),
                 str(active_shifts)
             ))
 
-        return CourseShiftGroupMembership.transfer_user(user, group_from, shift_to)
+        return CourseShiftGroupMembership.transfer_user(user, shift_from, shift)
+
+    def create_shift(self, start_date):
+        """
+        Creates plan with given start date.
+        """
+        if not self.settings.is_shift_enabled:
+            return ValueError("Can't create shift: feature is turned off for course")
+        if self.settings.is_autostart:
+            raise ValueError("Can't create shift in autostart mode")
+
+        name = self.settings.build_name(start_date)
+        days_shift = self.settings.calculate_days_add(start_date)
+        shift, created = CourseShiftGroup.create(
+            name=name,
+            course_key=self.course_key,
+            start_date=start_date,
+            days_shift=days_shift
+        )
+        return shift

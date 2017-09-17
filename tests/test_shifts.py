@@ -10,7 +10,7 @@ from student.tests.factories import UserFactory, RegistrationFactory, UserProfil
 from xmodule.modulestore.tests.django_utils import TEST_DATA_MIXED_MODULESTORE, ModuleStoreTestCase
 from xmodule.modulestore.tests.factories import ToyCourseFactory
 from django.db import IntegrityError
-from ..models import CourseShiftGroup, CourseShiftGroupMembership, CourseUserGroup, CourseShiftSettings, CourseShiftPlannedRun
+from ..models import CourseShiftGroup, CourseShiftGroupMembership, CourseUserGroup, CourseShiftSettings
 from ..manager import CourseShiftManager
 
 def date_shifted(days):
@@ -326,160 +326,121 @@ class TestCourseShiftSettings(ModuleStoreTestCase):
     Test the course shifts settings
     """
     MODULESTORE = TEST_DATA_MIXED_MODULESTORE
+    _ENROLL_BEFORE = 7
+    _ENROLL_AFTER = 0
+    _PERIOD = 20
+    _COURSE_DATE_START = 14
 
     def setUp(self):
         """
         Make sure that course is reloaded every time--clear out the modulestore.
         """
         super(TestCourseShiftSettings, self).setUp()
-        date = datetime.datetime.now() - datetime.timedelta(days=14)
+        date = datetime.datetime.now() - datetime.timedelta(days=self._COURSE_DATE_START)
         self.course = ToyCourseFactory.create(start=date)
         self.course_key = self.course.id
 
-    def _settings_setup(self, period=10, autostart=True):
+    def _settings_setup(self, period=_PERIOD, autostart=False):
         """
         Not included into setUp because should be tests
         """
         settings = CourseShiftSettings.get_course_settings(self.course_key)
         settings.is_shift_enabled = True
+        settings.enroll_before_days = 0
+        settings.enroll_before_days = 7
         settings.is_autostart = autostart
         settings.autostart_period_days = period
         settings.save()
-        return settings
+        return
+
+    def _delete_groups(self):
+        shift_groups = CourseShiftGroup.objects.all()
+        for x in shift_groups:
+            x.delete()
+
+    def _number_of_shifts(self, custom_period):
+        """
+        Calculates how many shifts should be in
+        current settings
+        """
+        course_started_days_ago = self._COURSE_DATE_START
+        # enroll_before effectively shifts start date here
+        # E.g. course started 15.01, period is 10, enroll_before is 5
+        # First shift is created immediately,second is created at 20.01,
+        # next one is created at 30.01.
+
+        course_started_days_ago += self._ENROLL_BEFORE
+        shifts_number = int(course_started_days_ago / custom_period)
+        shifts_number += 1
+        return shifts_number
+
+    def _no_groups_check(self):
+        """
+        Checks that there is no groups.
+        Used at start and anywhere needed
+        """
+        shift_groups = CourseShiftGroup.get_course_shifts(self.course_key)
+        self.assertTrue(
+            len(shift_groups) == 0,
+            "Course has shift groups at start:{}".format(shift_groups)
+        )
 
     def test_settings_generation_and_saving(self):
         """
         Tests that settings got by get_course_settings saved correctly
         """
-        self._settings_setup()
+        self._settings_setup(autostart=False)
         settings = CourseShiftSettings.get_course_settings(self.course_key)
 
         self.assertTrue(settings.is_shift_enabled == True)
-        self.assertTrue(settings.is_autostart == True)
-        self.assertTrue(settings.autostart_period_days == 10)
+        self.assertTrue(settings.is_autostart == False)
+        self.assertTrue(settings.autostart_period_days == self._PERIOD)
         settings.delete()
+        self._delete_groups()
 
-    def test_autostart_generation_single(self):
+    def test_autostart_generation_one(self):
         """
-        Single shift must be generated automatically
+        Single start should be generated - default shift at start
         """
-        settings = self._settings_setup(period=9)
-        course_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
-        self.assertTrue(len(course_shifts) == 0, "There are course shifts at start:{}".format(str(course_shifts)))
+        self._no_groups_check()
+        custom_period = 30
+        self._settings_setup(period=custom_period, autostart=True)
 
-        settings.update_shifts()
+        settings = CourseShiftSettings.get_course_settings(self.course_key)
         course_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
-        self.assertTrue(len(course_shifts) == 1, "Must be single shift, found:{}".format(str(course_shifts)))
-        for x in course_shifts:
-            x.delete()
+        shifts_number = self._number_of_shifts(custom_period)
+        self.assertTrue(len(course_shifts) == shifts_number, "Must be {} shift, found: {}".format(shifts_number, str(course_shifts)))
+        self._delete_groups()
+
+    def test_autostart_generation_two(self):
+        """
+        Two shifts must be generated automatically, default and one more
+        """
+        self._no_groups_check()
+        custom_period = 12
+        self._settings_setup(period=custom_period, autostart=True)
+        shifts_number = self._number_of_shifts(custom_period)
+        settings = CourseShiftSettings.get_course_settings(self.course_key)
+        course_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
+        self.assertTrue(len(course_shifts) == shifts_number, "Must be {} shifts, found:{}".format(
+            shifts_number,
+            str(course_shifts)))
+        self._delete_groups()
 
     def test_autostart_generation_three(self):
         """
         Three shifts must be generated automatically
         """
-        settings = self._settings_setup(period=4)
+        self._no_groups_check()
+        custom_period = 8
+        self._settings_setup(period=custom_period, autostart=True)
+        shifts_number = self._number_of_shifts(custom_period)
+        settings = CourseShiftSettings.get_course_settings(self.course_key)
         course_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
-        self.assertTrue(len(course_shifts) == 0, "There are course shifts at start:{}".format(str(course_shifts)))
-
-        settings.update_shifts()
-        course_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
-        self.assertTrue(len(course_shifts) == 3, "Must be 3 shifts, found:{}".format(str(course_shifts)))
-        for x in course_shifts:
-            x.delete()
-
-    def test_autostart_generation_zero(self):
-        """
-        Autostart but no shift should be generated.
-        """
-        settings = self._settings_setup(period=30)
-        course_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
-        self.assertTrue(len(course_shifts) == 0, "There are course shifts at start:{}".format(str(course_shifts)))
-
-        settings.update_shifts()
-        course_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
-        self.assertTrue(len(course_shifts) == 0, "Must be 0 shifts, found: {}".format(str(course_shifts)))
-
-    def test_plan_generation(self):
-        """
-        Tests that plans are generated correctly
-        """
-        settings = self._settings_setup(autostart=False)
-        plans = CourseShiftPlannedRun.get_course_plans(self.course_key)
-        self.assertTrue(len(plans) == 0, "There are shift plans at start:{}".format(str(plans)))
-
-        settings.create_plan(date_shifted(-3))
-        plans = CourseShiftPlannedRun.get_course_plans(self.course_key)
-        self.assertTrue(len(plans) == 1, "Must be single plan, found:{}".format(str(plans)))
-        plans[0].delete()
-
-    def test_plan_launch(self):
-        settings = self._settings_setup(autostart=False)
-
-        plans = CourseShiftPlannedRun.get_course_plans(self.course_key)
-        self.assertTrue(len(plans) == 0, "There are shift plans at start:{}".format(str(plans)))
-
-        course_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
-        self.assertTrue(len(course_shifts) == 0, "There are course shifts at start:{}".format(str(course_shifts)))
-
-        settings.create_plan(date_shifted(-3))
-        next_plan = settings.get_next_plan()
-        self.assertTrue(next_plan, "Plan is :{}".format(str(next_plan)))
-        next_plan.launch_shift(name="doesnt_matter", days_add=7)
-
-        plans = CourseShiftPlannedRun.get_course_plans(self.course_key)
-        self.assertTrue(len(plans) == 0, "Shouldn't be any plans, found:{}".format(str(plans)))
-
-        course_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
-        self.assertTrue(len(course_shifts) == 1, "Must be single shift, found:{}".format(str(course_shifts)))
-
-    def test_manual_generation_zero(self):
-        """
-        Tests manually preset plans.
-        Test with zero planned runs
-        """
-        settings = self._settings_setup(autostart=False)
-        course_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
-        self.assertTrue(len(course_shifts) == 0, "There are course shifts at start:{}".format(str(course_shifts)))
-
-        settings.update_shifts()
-
-        course_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
-        mes = "Course shifts shouldn't be generated, found:{}".format(str(course_shifts))
-        self.assertTrue(len(course_shifts) == 0, mes)
-
-    def test_manual_generation_one(self):
-        """
-        Tests manually preset plans.
-        Test with single planned run
-        """
-        settings = self._settings_setup(autostart=False)
-        settings.create_plan(start_date=date_shifted(-2))
-
-        course_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
-        self.assertTrue(len(course_shifts) == 0, "There are course shifts at start:{}".format(str(course_shifts)))
-
-        settings.update_shifts()
-
-        course_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
-        self.assertTrue(len(course_shifts) == 1, "Must be single shift, found:{}".format(str(course_shifts)))
-
-    def test_manual_generation_three(self):
-        """
-        Tests manually preset plans.
-        Test with three planned runs
-        """
-        settings = self._settings_setup(autostart=False)
-        settings.create_plan(start_date=date_shifted(-6))
-        settings.create_plan(start_date=date_shifted(-4))
-        settings.create_plan(start_date=date_shifted(-2))
-
-        course_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
-        self.assertTrue(len(course_shifts) == 0, "There are course shifts at start:{}".format(str(course_shifts)))
-
-        settings.update_shifts()
-
-        course_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
-        self.assertTrue(len(course_shifts) == 3, "Must be single shift, found:{}".format(str(course_shifts)))
+        self.assertTrue(len(course_shifts) == shifts_number, "Must be {} shifts, found:{}".format(
+            shifts_number,
+            str(course_shifts)))
+        self._delete_groups()
 
 
 @attr(shard=2)
@@ -493,37 +454,57 @@ class TestCourseShiftManager(ModuleStoreTestCase):
         self.shift_settings.is_shift_enabled = True
         self.shift_settings.save()
 
+    def _delete_groups(self):
+        for x in CourseShiftGroup.objects.all():
+            x.delete()
+
+    def _no_groups_check(self):
+        """
+        Checks that there is no groups.
+        Used at start and anywhere needed
+        """
+        shift_groups = CourseShiftGroup.get_course_shifts(self.course_key)
+        self.assertTrue(
+            len(shift_groups) == 0,
+            "Course has shift groups at start"
+        )
+
     def test_get_user_course_shift(self):
         """
         Tests method get_user_course_shift
         """
         user = UserFactory(username="test", email="a@b.com")
         shift_manager = CourseShiftManager(course_key=self.course_key)
-        shift_group = shift_manager.get_user_course_shift(user, self.course_key)
-        self.assertTrue(shift_group is None, "User shift group is {}, should be None".format(str(shift_group)))
+        shift_group = shift_manager.get_user_shift(user, self.course_key)
+        self.assertFalse(shift_group, "User shift group is {}, should be None".format(str(shift_group)))
 
         test_a_shift_group, created = CourseShiftGroup.create("test_shift_group", self.course_key)
         CourseShiftGroupMembership.transfer_user(user, None, test_a_shift_group)
-        shift_group = shift_manager.get_user_course_shift(user, self.course_key)
+        shift_group = shift_manager.get_user_shift(user, self.course_key)
         self.assertTrue(shift_group==test_a_shift_group, "User shift group is {}, should be {}".format(
             str(shift_group),
             str(test_a_shift_group)
         ))
+        self._delete_groups()
+
+    def test_get_user_course_shift_disabled(self):
+        user = UserFactory(username="test", email="a@b.com")
+        test_a_shift_group, created = CourseShiftGroup.create("test_shift_group", self.course_key)
+        CourseShiftGroupMembership.transfer_user(user, None, test_a_shift_group)
 
         self.shift_settings.is_shift_enabled = False
         self.shift_settings.save()
         shift_manager = CourseShiftManager(self.course_key)
-        shift_group = shift_manager.get_user_course_shift(user, self.course_key)
+        shift_group = shift_manager.get_user_shift(user, self.course_key)
         self.assertTrue(shift_group is None, "User shift group is {}, should be None".format(str(shift_group)))
 
         self.shift_settings.is_shift_enabled = True
         self.shift_settings.save()
-        CourseShiftGroupMembership.transfer_user(user, test_a_shift_group, None)
-        test_a_shift_group.delete()
+        self._delete_groups()
 
     def test_get_active_shifts(self):
         """
-        Tests method get_active_shifts
+        Tests method get_active_shifts without user
         """
         shift_manager = CourseShiftManager(self.course_key)
         course_shifts = shift_manager.get_active_shifts()
@@ -539,15 +520,7 @@ class TestCourseShiftManager(ModuleStoreTestCase):
             str(group2),
             str(course_shifts)
         ))
-
-        course_shifts = shift_manager.get_active_shifts(date_threshold=date_shifted(-2))
-        correct = (group1 in course_shifts) and (len(course_shifts) == 1)
-        self.assertTrue(correct, "Shifts should be {}, found {}".format(
-            str(group1),
-            str(course_shifts)
-        ))
-        group1.delete()
-        group2.delete()
+        self._delete_groups()
 
     def test_sign_user_on_shift_valid(self):
         """
@@ -556,14 +529,14 @@ class TestCourseShiftManager(ModuleStoreTestCase):
         """
         user = UserFactory(username="test", email="a@b.com")
         shift_manager = CourseShiftManager(course_key=self.course_key)
-        shift_group = shift_manager.get_user_course_shift(user, self.course_key)
+        shift_group = shift_manager.get_user_shift(user, self.course_key)
         self.assertTrue(shift_group is None, "User shift group is {}, should be None".format(str(shift_group)))
 
         group1, created = CourseShiftGroup.create("test_group", self.course_key)
         group2, created = CourseShiftGroup.create("test_group2", self.course_key, start_date=date_shifted(days=-5))
 
         shift_manager.sign_user_on_shift(user, group1, self.course_key)
-        shift_group = shift_manager.get_user_course_shift(user, self.course_key)
+        shift_group = shift_manager.get_user_shift(user, self.course_key)
         self.assertTrue(shift_group == group1, "User shift group is {}, should be {}".format(
             str(shift_group),
             str(group1)
@@ -571,19 +544,17 @@ class TestCourseShiftManager(ModuleStoreTestCase):
 
         shift_manager.sign_user_on_shift(
             user=user,
-            shift_to=group2,
-            shift_from=group1,
             course_key=self.course_key,
-            shift_up_only=False
+            shift=group2
         )
-        shift_group = shift_manager.get_user_course_shift(user, self.course_key)
+        shift_group = shift_manager.get_user_shift(user, self.course_key)
         self.assertTrue(shift_group == group2, "User shift group is {}, should be {}".format(
             str(shift_group),
             str(group2)
         ))
 
-        shift_manager.sign_user_on_shift(user, shift_to=group1, course_key=self.course_key, forced=True)
-        shift_group = shift_manager.get_user_course_shift(user, self.course_key)
+        shift_manager.sign_user_on_shift(user, shift=group1, course_key=self.course_key)
+        shift_group = shift_manager.get_user_shift(user, self.course_key)
         self.assertTrue(shift_group == group1, "User shift group is {}, should be {}".format(
             str(shift_group),
             str(group1)
@@ -592,7 +563,7 @@ class TestCourseShiftManager(ModuleStoreTestCase):
         group1.delete()
         group2.delete()
 
-    def test_sign_user_on_shift_invalid(self):
+    def _test_sign_user_on_shift_invalid(self):
         """
         Tests method sign_user_on_shift.
         Invalid scenarios
@@ -602,7 +573,7 @@ class TestCourseShiftManager(ModuleStoreTestCase):
 
         user = UserFactory(username="test", email="a@b.com")
         shift_manager = CourseShiftManager(course_key=self.course_key)
-        shift_group = shift_manager.get_user_course_shift(user, self.course_key)
+        shift_group = shift_manager.get_user_shift(user, self.course_key)
         self.assertTrue(shift_group is None, "User shift group is {}, should be None".format(str(shift_group)))
 
         group1, created = CourseShiftGroup.create("test_group", self.course_key)
@@ -620,8 +591,7 @@ class TestCourseShiftManager(ModuleStoreTestCase):
         with self.assertRaises(ValueError) as context_manager:
             shift_manager.sign_user_on_shift(
                 user=user,
-                shift_from=group1,
-                shift_to=group_invalid,
+                shift=group2,
                 course_key=second_course_key
             )
         exception_msg_parts = ("Shift_from's  course_key:", "given course_key:")
