@@ -1,7 +1,7 @@
 """
 This file contains the logic for course shifts.
 """
-from datetime import timedelta
+from datetime import timedelta, datetime
 from logging import getLogger
 
 from django.core.exceptions import ValidationError
@@ -56,16 +56,13 @@ class CourseShiftGroup(models.Model):
     def name(self):
         return self.course_user_group.name
 
-    def get_shifted_due(self, user, block, name):
-        value = getattr(block, name)
-        if not value:
-            return
+    def get_shifted_date(self, user, date):
         if user not in self.users.all():
             raise ValueError("User '{}' is not in shift '{}'".format(
                 user.username,
                 str(self)
             ))
-        return value + timedelta(days=self.days_shift)
+        return date + timedelta(days=self.days_shift)
 
     def get_enrollment_limits(self, shift_settings=None):
         """
@@ -304,7 +301,6 @@ class CourseShiftSettings(models.Model):
 
     def __init__(self, *args, **kwargs):
         super(CourseShiftSettings, self).__init__(*args, **kwargs)
-        self._update_shifts_autostart()
 
     @property
     def last_start_date(self):
@@ -323,6 +319,10 @@ class CourseShiftSettings(models.Model):
 
     @classmethod
     def get_course_settings(cls, course_key):
+        """
+        Return shift settings for given course. Creates
+        if doesn't exist
+        """
         current_settings, created = cls.objects.get_or_create(course_key=course_key)
         if created:
             log.info("Settings for {} are created".format(
@@ -330,15 +330,19 @@ class CourseShiftSettings(models.Model):
             ))
         return current_settings
 
-    def build_name(self, **kwargs):
+    def build_default_name(self, **kwargs):
         """
         :param start_date
-        Defines how should be shifts named
+        Defines how should be shifts named if specific name wasn't given
         """
         date = kwargs.get("start_date")
         return "shift_{}_{}".format(str(self.course_key), str(date))
 
-    def calculate_days_add(self, start_date):
+    def calculate_days_shift(self, start_date):
+        """
+        For given shift start date calculates days_shift value
+        as a difference between course and shift start dates
+        """
         return int((start_date - self.course_start_date).days)
 
     def get_next_autostart_date(self):
@@ -360,17 +364,19 @@ class CourseShiftSettings(models.Model):
         """
         return start_date - timedelta(days=self.enroll_before_days)
 
-    def _update_shifts_autostart(self):
+    def update_shifts_autostart(self):
         """
         Creates new shifts if required by autostart settings
         """
+        if not (self.is_autostart and self.is_shift_enabled):
+            return
         start_date = self.get_next_autostart_date()
         if not start_date:
             return
         launch_date = self._calculate_launch_date(start_date)
         while launch_date < date_now():
-            name = self.build_name(start_date=start_date)
-            days_shift = self.calculate_days_add(start_date=start_date)
+            name = "auto_" + self.build_default_name(start_date=start_date)
+            days_shift = self.calculate_days_shift(start_date=start_date)
 
             group, created = CourseShiftGroup.create(
                 name=name,
@@ -379,7 +385,26 @@ class CourseShiftSettings(models.Model):
                 course_key=self.course_key
             )
             if created:
-                log.info("Shift {} automatically created".format(str(group)))
+                log.info("Shift {} automatically created, launch date is {}; start date is {}, enroll_before is {}".format(
+                    str(group),
+                    str(launch_date),
+                    str(start_date),
+                    str(self.enroll_before_days)
+                ))
             start_date = self.get_next_autostart_date()
             launch_date = self._calculate_launch_date(start_date)
 
+    def save(self, *args, **kwargs):
+        self.update_shifts_autostart()
+        return super(CourseShiftSettings, self).save(*args, **kwargs)
+
+    def __unicode__(self):
+        text = u"{}; -{}/+{} days,".format(
+            unicode(self.course_key),
+            unicode(self.enroll_before_days),
+            unicode(self.enroll_after_days))
+        if self.is_autostart:
+            text += u"auto"
+        else:
+            text += u"manual"
+        return text

@@ -8,13 +8,13 @@ finish the course and get credit.
 
 There are several differences between this app and course rerun/CCX:
 
-1. The content of the course is the same in all course shifts. Therefore it should be easier for staff to upgrade such course if necessary. It also doesn't spend additional resources.
+1. The content of the course is the same in all course shifts. Therefore it should be easier for staff to upgrade such course if necessary. It also doesn't spend additional system resources.
 
-2. Forum is shared between all course shifts.
+2. Forum is shared between all course shifts. This can be useful when there are not so much students in each shift.
 
 3. Students can use this function when they want, and therefore course schedule becomes more flexible.
 
 Details
 -------
 Feature is implemented via additional FieldOverrideProvider and CourseUserGroups, similar to the way it's done for 'INDIVIDUAL_DUE_DATES' feature.
-Every course student is associated with some CourseUserGroup, and provider checks for membership and shift due dates accordingly.
+Every course student is associated with some CourseUserGroup, and provider checks for membership and shifts due dates accordingly.
