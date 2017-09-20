@@ -18,3 +18,22 @@ Details
 -------
 Feature is implemented via additional FieldOverrideProvider and CourseUserGroups, similar to the way it's done for 'INDIVIDUAL_DUE_DATES' feature.
 Every course student is associated with some CourseUserGroup, and provider checks for membership and shifts due dates accordingly.
+
+Installation
+------------
+
+1. 'course_shifts' should be added to the INSTALLED_APPS variable:
+
+::
+
+  INSTALLED_APPS += ('openedx.core.djangoapps.course_shifts',)
+
+2. course_shifts.provider.CourseShiftOverrideProvider should be added to the FIELD_OVERRIDE_PROVIDERS
+
+::
+
+  FIELD_OVERRIDE_PROVIDERS += (
+      'openedx.core.djangoapps.course_shifts.provider.CourseShiftOverrideProvider',
+  )
+
+Note that if feature INDIVIDUAL_DUE_DATES is also used, than IndividualStudentOverrideProvider must be added before CourseShiftOverrideProvider.
