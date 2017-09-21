@@ -5,6 +5,7 @@ from datetime import timedelta, datetime
 from logging import getLogger
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.contrib.auth.models import User
 from django.db import models, IntegrityError
 from django.utils import timezone
@@ -282,21 +283,24 @@ class CourseShiftSettings(models.Model):
         db_column='autostart_period_days',
         help_text="Number of days between new automatically generated shifts."\
             "Used only in autostart mode.",
-        null=True
+        null=True,
+        validators=[MinValueValidator(0)]
         )
 
     enroll_before_days = models.PositiveIntegerField(
         default=14,
         help_text="Days before shift start when student can enroll already."\
         "E.g. if shift starts at 01/20/2020 and value is 5 then shift will be"\
-        "available from 01/15/2020."
+        "available from 01/15/2020.",
+        validators=[MinValueValidator(0)]
     )
 
     enroll_after_days = models.PositiveIntegerField(
         default=7,
         help_text="Days after shift start when student still can enroll." \
         "E.g. if shift starts at 01/20/2020 and value is 10 then shift will be" \
-        "available till 01/20/2020"
+        "available till 01/20/2020",
+        validators=[MinValueValidator(0)]
     )
 
     def __init__(self, *args, **kwargs):

@@ -37,3 +37,11 @@ Installation
   )
 
 Note that if feature INDIVIDUAL_DUE_DATES is also used, than IndividualStudentOverrideProvider must be added before CourseShiftOverrideProvider.
+
+3. Add urls to the urls.py in lms/ and cms/:
+
+::
+
+  urlpatterns += (
+      url(r'^course_shifts/', include('openedx.core.djangoapps.course_shifts.urls', app_name="course_shifts", namespace="course_shifts")),
+  )
