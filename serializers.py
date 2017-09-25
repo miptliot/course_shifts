@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from openedx.core.lib.api.serializers import CourseKeyField
-from .models import CourseShiftSettings
+from .models import CourseShiftSettings, CourseShiftGroup
 
 
 class CourseShiftSettingsSerializer(serializers.ModelSerializer):
@@ -26,16 +26,29 @@ class CourseShiftSettingsSerializer(serializers.ModelSerializer):
         )
 
     def validate_enroll_after_days(self, value):
+        if not isinstance(value, int):
+            value = int(value)
         message = "Enrollment days number after start can't be negative"
         if value < 0:
             raise serializers.ValidationError(message)
+        return value
 
     def validate_enroll_before_days(self, value):
+        if not isinstance(value, int):
+            value = int(value)
+
         message = "Enrollment days number before start can't be negative"
         if value < 0:
             raise serializers.ValidationError(message)
+        return value
 
     def validate_autostart_period_days(self, value):
+        if not isinstance(value, int):
+            value = int(value)
+
         message = "Autostart period must be positive"
         if value <= 0:
             raise serializers.ValidationError(message)
+        return value
+
+

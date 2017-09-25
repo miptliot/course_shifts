@@ -1,0 +1,54 @@
+<%page args="section_data" expression_filter="h"/>
+<%namespace name='static' file='../../static_content.html'/>
+
+<%!
+from django.utils.translation import ugettext as _
+from openedx.core.djangolib.js_utils import dump_js_escaped_json, js_escaped_string
+%>
+
+
+<div class="course-shifts-container action-type-container" id="course-shifts">
+    <div class="request-response-error msg msg-error copy" id="data-request-response-error"></div>
+    <div class="course-shifts-settings-editor">
+        <h4 class="hd hd-3">${_("Settings Editor")}</h4>
+        % if section_data.get('current_settings'):
+            <fieldset id="edit-settings-form">
+                <ul role="group" class="course-shifts-settings-fields">
+                    <input type="hidden" name="csrfmiddlewaretoken" value="${csrf_token}">
+                    <li>
+                        <input type="radio" name="is-autostart" value="True"
+                        % if section_data['current_settings']['is_autostart']:
+                            checked
+                        % endif
+                            > <span>True</span>
+                        <input type="radio" name="is-autostart" value="False"
+                        % if not section_data['current_settings']['is_autostart']:
+                            checked
+                        % endif
+                        ><span>False</span>
+                        <label for="is-autostart"> ${_("Start shifts automatically")}</label>
+
+                    </li>
+                    <li>
+                        <input name="autostart-period-days" type="number" value=${section_data['current_settings']['autostart_period_days']} >
+                        <label for="autostart-period-days">${_("Days between automatically started shifts")}</label>
+                    </li>
+                    <li>
+                        <input name="enroll-before-days" type="number" value=${section_data['current_settings']['enroll_before_days']} >
+                        <label for="enroll-before-days">${_("Number of days enrollment allowed before shift start")}</label>
+                    </li>
+                    <li>
+                        <input name="enroll-after-days" type="number" value=${section_data['current_settings']['enroll_after_days']} >
+                        <label for="enroll-after-days">${_("Number of days enrollment allowed after shift start")}</label>
+                    </li>
+                </ul>
+
+                <input type="submit" name="settings-submit" class="btn-blue" id="course-shifts-settings-submit" data-endpoint="${section_data['course_shifts_settings_api_url']}" value="${_('Submit')}"/>
+            </fieldset>
+                % else:
+            <p>${_("Course shifts are disabled. Actually, you shouldn't even see this page!")}</p>
+        % endif
+    </div>
+    <div class="request-response"></div>
+    <div class="request-response-error"></div>
+</div>

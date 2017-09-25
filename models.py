@@ -408,7 +408,7 @@ class CourseShiftSettings(models.Model):
             unicode(self.enroll_before_days),
             unicode(self.enroll_after_days))
         if self.is_autostart:
-            text += u"auto"
+            text += u"auto({})".format(self.autostart_period_days)
         else:
             text += u"manual"
         return text
