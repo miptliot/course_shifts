@@ -4,11 +4,12 @@ from openedx.core.lib.api.permissions import IsStaffOrOwner
 
 from .models import CourseShiftSettings, CourseShiftGroup
 from .serializers import CourseShiftSettingsSerializer, CourseShiftSerializer
+from .manager import CourseShiftManager
 
 
 class CourseShiftSettingsView(views.APIView):
     """
-    Allows instructor to manipulate course shift settings
+    Allows instructor to edit course shift settings
     """
     #permission_classes = (permissions.IsAuthenticated, IsStaffOrOwner)
     permissions = tuple()
@@ -41,3 +42,84 @@ class CourseShiftSettingsView(views.APIView):
             error_message = u";<br>".join(errors_by_key)
             return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": error_message})
 
+
+class CourseShiftListView(generics.ListAPIView):
+    """
+    Returns list of shifts for given course
+    """
+    serializer_class = CourseShiftSerializer
+
+    def get_queryset(self):
+        course_id = self.kwargs['course_id']
+        course_key = CourseKey.from_string(course_id)
+        return CourseShiftGroup.get_course_shifts(course_key)
+
+    def list(self, request, course_id):
+        queryset = self.get_queryset()
+        serializer = CourseShiftSerializer(queryset, many=True)
+        data = serializer.data
+        return response.Response(data=data)
+
+
+class CourseShiftDetailView(views.APIView):
+    """
+    Allows instructor to watch, to create and to delete course_shifts
+    """
+
+    def _get_shift(self, course_id, name):
+        course_key = CourseKey.from_string(course_id)
+        shift_manager = CourseShiftManager(course_key)
+        shift = shift_manager.get_shift(name)
+        if not shift:
+            message = "Shift with name {} not found for {}".format(name, course_key)
+            return None, response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": message})
+        return shift, None
+
+    def get(self, request, course_id):
+        name = request.query_params.get("name")
+        shift, error_response = self._get_shift(course_id, name)
+        if not shift:
+            return error_response
+        data = CourseShiftSerializer(shift).data
+
+        enroll_start, enroll_finish = shift.get_enrollment_limits()
+        data["enroll_start"] = str(enroll_start)
+        data["enroll_finish"] = str(enroll_finish)
+        data["users_count"] = shift.users.count()
+        return response.Response(data=data)
+
+    def delete(self, request, course_id):
+        name = request.data.get("name")
+        shift, error_response = self._get_shift(course_id, name)
+        if not shift:
+            return error_response
+        shift.delete()
+        return response.Response()
+
+    def post(self, request, course_id):
+        data = {}
+        data["start_date"] = request.data.get("start_date")
+        data["name"] = request.data.get("name")
+        data['course_key'] = course_id
+        serial = CourseShiftSerializer(data=data, partial=True)
+        if serial.is_valid():
+            kwargs = serial.validated_data
+        else:
+            errors = serial.errors
+            errors_dict = {}
+            for key in errors.keys():
+                if not errors[key]:
+                    continue
+                key_message = u",".join(unicode(x) for x in errors[key])
+                errors_dict[key] = key_message
+            return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": errors_dict})
+
+        kwargs.pop('course_key')
+        course_key = CourseKey.from_string(course_id)
+        shift_manager = CourseShiftManager(course_key)
+        try:
+            shift_manager.create_shift(**kwargs)
+        except Exception as e:
+            error_message = e.message or str(e)
+            return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": error_message})
+        return response.Response()

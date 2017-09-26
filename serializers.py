@@ -52,3 +52,15 @@ class CourseShiftSettingsSerializer(serializers.ModelSerializer):
         return value
 
 
+class CourseShiftSerializer(serializers.ModelSerializer):
+    course_key = CourseKeyField()
+    name = serializers.CharField(max_length=255, allow_null=True)
+    start_date = serializers.DateField(allow_null=True)
+
+    class Meta:
+        model = CourseShiftGroup
+        fields = (
+            'course_key',
+            'name',
+            'start_date',
+        )

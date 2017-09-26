@@ -57,6 +57,16 @@ class CourseShiftGroup(models.Model):
     def name(self):
         return self.course_user_group.name
 
+    @property
+    def settings(self):
+        if not hasattr(self, '_shift_settings'):
+            self._shift_settings = CourseShiftSettings.get_course_settings(self.course_key)
+        return self._shift_settings
+
+    @settings.setter
+    def settings(self, value):
+        self._shift_settings = value
+
     def get_shifted_date(self, user, date):
         if user not in self.users.all():
             raise ValueError("User '{}' is not in shift '{}'".format(
@@ -70,7 +80,8 @@ class CourseShiftGroup(models.Model):
         Return tuple of enrollment start and end dates
         """
         if not shift_settings:
-            shift_settings = CourseShiftSettings.get_course_settings(self.course_key)
+                shift_settings = self._shift_settings
+
         return (
             self.start_date - timedelta(days=shift_settings.enroll_before_days),
             self.start_date + timedelta(days=shift_settings.enroll_after_days)
@@ -78,7 +89,7 @@ class CourseShiftGroup(models.Model):
 
     def is_enrollable_now(self, shift_settings=None):
         if not shift_settings:
-            shift_settings = CourseShiftSettings.get_course_settings(self.course_key)
+            shift_settings = self.settings
         date_start, date_end = self.get_enrollment_limits(shift_settings)
         if date_start < date_now() < date_end:
             return True
@@ -94,12 +105,30 @@ class CourseShiftGroup(models.Model):
         return cls.objects.filter(course_key=course_key).order_by('-start_date')
 
     @classmethod
+    def get_shift(cls, course_key, name):
+        """
+        Returns shift for given course with given name if exists
+        """
+        if not isinstance(course_key, CourseKey):
+            raise TypeError("course_key must be CourseKey, not {}".format(type(course_key)))
+        try:
+            return cls.objects.get(course_key=course_key, course_user_group__name=name)
+        except:
+            return None
+
+    @classmethod
     def create(cls, name, course_key, start_date=None, days_shift=None):
         """
         Creates new CourseShiftGroup.
         If shift with (name, course_key) combination already exists returns this shift
         """
         course_user_group, created_group = CourseUserGroup.create(name=name, course_id=course_key)
+        if not created_group:
+            shift = CourseShiftGroup.objects.get(course_user_group=course_user_group)
+            if shift.name != name:
+                raise ValueError("Shift already exists with different name: {}".format(str(shift.name)))
+            if shift.start_date != start_date:
+                raise ValueError("Shift already exists with different start_date: {}".format(str(shift.start_date)))
         kwargs = {"course_user_group": course_user_group}
         if start_date:
             kwargs["start_date"] = start_date

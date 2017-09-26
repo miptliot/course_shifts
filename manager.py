@@ -36,6 +36,12 @@ class CourseShiftManager(object):
     def get_all_shifts(self):
         return CourseShiftGroup.get_course_shifts(self.course_key)
 
+    def get_shift(self, name):
+        shift = CourseShiftGroup.get_shift(course_key=self.course_key, name=name)
+        if shift:
+            shift.settings = self.settings
+        return shift
+
     def get_active_shifts(self, user=None):
         """
         Returns shifts that are are active at this moment according to the settings,
