@@ -9,10 +9,10 @@ from .api import CourseShiftSettingsView, CourseShiftListView, CourseShiftDetail
 urlpatterns = patterns(
     'course_shifts',
     url(r'^detail/{}/$'.format(settings.COURSE_ID_PATTERN), CourseShiftDetailView.as_view(),
-        name='course_shifts_detail'),
+        name='detail'),
     url(r'^settings/{}/$'.format(settings.COURSE_ID_PATTERN), CourseShiftSettingsView.as_view(),
         name='settings'),
     url(r'^{}/$'.format(settings.COURSE_ID_PATTERN), CourseShiftListView.as_view(),
-        name='course_shifts_list'),
+        name='list'),
 
 )

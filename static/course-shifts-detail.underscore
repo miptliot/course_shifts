@@ -1,0 +1,46 @@
+<div class="course-shifts-view" id="course-shifts-view">
+    <h3 class="hd hd-3"><%- gettext("Shifts Editing View") %></h3>
+    <div class="">
+        <fieldset id="shift-edit-view">
+            <select id="shift-select">
+                <% for (var i = 0; i < shifts_list.length; i++) {
+                    var shift = shifts_list[i];
+                %>
+                    <option value="<%- shift['name'] %>">
+                        <%-shift['name'] %>
+                    </option>
+                <% } %>
+                    <option value="create-new-shift">
+                        CREATE NEW
+                    </option>
+            </select>
+            <br>
+            <div class="shift-info">
+                 <input name="course-shift-name" type="text">
+                 <label for="course-shift-name"><%- gettext("Name of shift")%> </label>
+
+                 <br>
+                 <input name="course-shift-date" type="date">
+                 <label for="course-shift-date"><%- gettext("Start date of shift")%></label>
+                 <table>
+                    <tr>
+                        <th scope="row"><%- gettext("Enrollement start")%></th>
+                        <td id="current-shift-enrollement-start"></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><%- gettext("Enrollement finish")%></th>
+                        <td id="current-shift-enrollement-finish"></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><%- gettext("Users in shift")%></th>
+                        <td id="current-shift-users-count"></td>
+                    </tr>
+                 </table>
+            </div>
+            <button type="submit" class="btn-blue upload-csv-button" id="change-post-shift-button">
+                <%- gettext("Submit") %>
+            </button>
+        </fieldset>
+        <div class="bulk-exception-results hidden"></div>
+    </div>
+</div>
