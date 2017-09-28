@@ -53,7 +53,7 @@ class CourseShiftSettingsSerializer(serializers.ModelSerializer):
 
 
 class CourseShiftSerializer(serializers.ModelSerializer):
-    course_key = CourseKeyField()
+    course_key = CourseKeyField(required=False)
     name = serializers.CharField(max_length=255, allow_null=True)
     start_date = serializers.DateField(allow_null=True)
 
@@ -64,3 +64,14 @@ class CourseShiftSerializer(serializers.ModelSerializer):
             'name',
             'start_date',
         )
+
+    def error_dict(self):
+        errors = self.errors
+        errors_by_key = {}
+        for key in errors.keys():
+            if not errors[key]:
+                continue
+            message = u";".join(unicode(x) for x in errors[key])
+            errors_by_key[key] = message
+        print(errors_by_key)
+        return errors_by_key

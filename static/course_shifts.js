@@ -45,92 +45,170 @@
 
             this.autostart_change = function (){
                 var value = ext.$is_autostart.filter(":checked").val();
-                if (value == "True"){
+                if (value.includes("True")){
                     ext.$autostart_period_days.attr("disabled", false);
                 }
-                if (value == "False"){
+                if (value.includes("False")){
                     ext.$autostart_period_days.val(null);
                     ext.$autostart_period_days.attr("disabled", true);
                 }
             };
-            this.autostart_change();
             this.$is_autostart.change(this.autostart_change);
             this.$course_shifts_view = ext.$section.find('#course-shifts-view');
-
-            this.get_shift_list = function(handle){
-                return $.ajax({
-                    type: 'GET',
-                    dataType: 'json',
-                    url: this.$course_shifts_view.data('url-list'),
-                    success: function(data) {
-                        return handle(data);
-                    },
-                    error: function(xhr) {
-                        return handle([]);
-                    }
-                });
-            };
-
-            this.render_list = function() {
-                this.get_shift_list(function (data) {
-                    var rendered_shifts = edx.HtmlUtils.template($('#course-shifts-detail-tpl').text())({
-                        shifts_list: data
-                    });
-                    ext.$course_shifts_view.html(rendered_shifts["text"]);
-                    var select_shift = ext.$section.find("#shift-select");
-                    select_shift.change(function () {
-                        ext.render_shift(this.value);
-                    })
-                });
-            };
-
-            this.render_shift_info = function(data){
-                var name_field = ext.$course_shifts_view.find("input[name='course-shift-name']");
-                var date_field = ext.$course_shifts_view.find("input[name='course-shift-date']");
-                var enroll_start_field = ext.$course_shifts_view.find("#current-shift-enrollement-start");
-                var enroll_finish_field = ext.$course_shifts_view.find("#current-shift-enrollement-finish");
-                var users_count = ext.$course_shifts_view.find("#current-shift-users-count");
-                if ($.isEmptyObject(data)){
-                    name_field.attr("value", '');
-                    date_field.attr("value", '');
-                    enroll_start_field.html('');
-                    enroll_finish_field.html('');
-                    users_count.html('');
-                    return;
-                }
-                name_field.attr("value", data["name"]);
-                date_field.attr("value", data["start_date"]);
-                enroll_start_field.html(data["enroll_start"]);
-                enroll_finish_field.html(data["enroll_finish"]);
-                users_count.html(data["users_count"]);
-            };
-
-            this.render_shift = function(name){
-
-                if (name.includes("create-new-shift")){
-                    ext.render_shift_info({});
-                    return;
-                }
-                var data = {"name": name};
-                return $.ajax({
-                    type: 'GET',
-                    dataType: 'json',
-                    url: this.$course_shifts_view.data('url-detail'),
-                    data:data,
-                    success: function(data) {
-                        ext.render_shift_info(data);
-                    },
-                    error: function(xhr) {
-                        return ext.fail_with_error('course-shifts', 'Error getting shift data', xhr);
-                    }
-                });
-            };
-
-
-            this.render_list();
-
+            this.create_shift_code = 'create-new-shift';
+            this.autostart_change();
+            this.render_shift_view();
         }
 
+        course_shifts.prototype.render_shift_view = function() {
+            var ext = this;
+            var render = function (data) {
+                var rendered_shifts = edx.HtmlUtils.template($('#course-shifts-detail-tpl').text())({
+                    shifts_list: data
+                });
+                ext.$course_shifts_view.html(rendered_shifts["text"]);
+                var select_shift = ext.$section.find("#shift-select");
+                select_shift.change(function () {
+                    ext.render_shift(this.value);
+                });
+
+                ext.render_shift(select_shift.val());
+
+                ext.$submit_shift_view_button = ext.$course_shifts_view.find("#change-create-shift-button");
+                var shift_view_submit_clicked = function() {
+                    var name = ext.$course_shifts_view.find("input[name='course-shift-name']").attr("value");
+                    var date = ext.$course_shifts_view.find("input[name='course-shift-date']").attr("value");
+                    var select = ext.$course_shifts_view.find("#shift-select").val();
+                    if (select.includes(ext.create_shift_code)) {
+                        data = {};
+                        if (name) {
+                            data["name"] = name;
+                        }
+                        if (date) {
+                            data["start_date"] = date;
+                        }
+                        return $.ajax({
+                            type: 'POST',
+                            dataType: 'json',
+                            url: ext.$course_shifts_view.data('url-detail'),
+                            data: data,
+                            success: function (data) {
+                                ext.display_response('course-shifts', data);
+                                ext.render_shift_view();
+                            },
+                            error: function (xhr) {
+                                return ext.fail_with_error('course-shifts', 'Error getting shift data', xhr);
+                            }
+                        });
+                    }
+                    else {
+                        data = {};
+                        data["name"] = select;
+                        if (name) {
+                            data["new_name"] = name;
+                        }
+                        if (date) {
+                            data["new_start_date"] = date;
+                        }
+                        return $.ajax({
+                            type: 'PATCH',
+                            dataType: 'json',
+                            url: ext.$course_shifts_view.data('url-detail'),
+                            data: data,
+                            success: function (data) {
+                                ext.display_response('course-shifts', data);
+                                ext.render_shift_view();
+                            },
+                            error: function (xhr) {
+                                return ext.fail_with_error('course-shifts', 'Error getting shift data', xhr);
+                            }
+                        });
+                    }
+                };
+                ext.$submit_shift_view_button.click(shift_view_submit_clicked);
+
+                ext.$delete_shift_button = ext.$course_shifts_view.find("#delete-shift-button");
+                ext.$delete_shift_button.click(function () {
+                    ext.clear_display();
+                    var select = ext.$course_shifts_view.find("#shift-select").val();
+                    if (select.includes(ext.create_shift_code)){
+                        return
+                    }
+                    data = {"name":select};
+                    return $.ajax({
+                        type: 'DELETE',
+                        dataType: 'json',
+                        url: ext.$course_shifts_view.data('url-detail'),
+                        data: data,
+                        success: function (data) {
+                            ext.display_response('course-shifts', data);
+                            ext.render_shift_view();
+                        },
+                        error: function (xhr) {
+                            return ext.fail_with_error('course-shifts', 'Error deleting shift:', xhr);
+                        }
+                    })
+                })
+
+            };
+
+            return $.ajax({
+                type: 'GET',
+                dataType: 'json',
+                url: this.$course_shifts_view.data('url-list'),
+                success: function(data) {
+                    return render(data);
+                },
+                error: function(xhr) {
+                    return render([]);
+                }
+            });
+        };
+
+        course_shifts.prototype.render_shift = function(name){
+            var ext = this;
+            var render_shift_info = function(data){
+                    var name_field = ext.$course_shifts_view.find("input[name='course-shift-name']");
+                    var date_field = ext.$course_shifts_view.find("input[name='course-shift-date']");
+                    var enroll_start_field = ext.$course_shifts_view.find("#current-shift-enrollement-start");
+                    var enroll_finish_field = ext.$course_shifts_view.find("#current-shift-enrollement-finish");
+                    var users_count = ext.$course_shifts_view.find("#current-shift-users-count");
+                    if ($.isEmptyObject(data)){
+                        name_field.attr("value", '');
+                        date_field.attr("value", '');
+                        enroll_start_field.html('');
+                        enroll_finish_field.html('');
+                        users_count.html('');
+                        return;
+                    }
+                    name_field.attr("value", data["name"]);
+                    date_field.attr("value", data["start_date"]);
+                    enroll_start_field.html(data["enroll_start"]);
+                    enroll_finish_field.html(data["enroll_finish"]);
+                    users_count.html(data["users_count"]);
+                };
+            if (name.includes(ext.create_shift_code)){
+                render_shift_info({});
+                return;
+            }
+            var data = {"name": name};
+            return $.ajax({
+                type: 'GET',
+                dataType: 'json',
+                url: this.$course_shifts_view.data('url-detail'),
+                data:data,
+                success: function(data) {
+                    render_shift_info(data);
+                },
+                error: function(xhr) {
+                    return ext.fail_with_error('course-shifts', 'Error getting shift data', xhr);
+                }
+            });
+        };
+
+        course_shifts.prototype.shift_view_submit_clicked = function (ext) {
+
+        };
         course_shifts.prototype.clear_display = function() {
             this.$section.find('.request-response-error').empty().hide();
             return this.$section.find('.request-response').empty().hide();
@@ -141,10 +219,11 @@
             $taskError = this.$section.find('#' + id + ' .request-response-error');
             $taskResponse = this.$section.find('#' + id + ' .request-response');
             $taskError.empty().hide();
-            if (!data){
+            if ($.isEmptyObject(data)){
                 data = "Success.";
             }
-            $taskResponse.empty().text(data);
+            var message = data;
+            $taskResponse.empty().text(message);
             return $taskResponse.show();
         };
 
@@ -155,7 +234,15 @@
             $taskResponse = this.$section.find('#' + id + ' .request-response');
             this.clear_display();
             data = $.parseJSON(xhr.responseText);
-            message += ': ' + data.error;
+
+            var error_message = data.error;
+            if ($.type(error_message) != 'string'){
+                error_message = '';
+                for (var key in data.error){
+                    error_message += key + ":" +data.error[key] +"<br>";
+                }
+            }
+            message += ': ' + error_message;
             $taskResponse.empty();
             $taskError.empty();
             $taskError.text(message);

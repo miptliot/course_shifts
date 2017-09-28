@@ -31,7 +31,7 @@ class CourseShiftSettingsView(views.APIView):
             course_key = serial_shift_settings.validated_data['course_key']
             instance = CourseShiftSettings.get_course_settings(course_key)
             serial_shift_settings.update(instance, serial_shift_settings.validated_data)
-            return response.Response()
+            return response.Response({})
         else:
             errors = serial_shift_settings.errors
             errors_by_key = []
@@ -94,14 +94,42 @@ class CourseShiftDetailView(views.APIView):
         if not shift:
             return error_response
         shift.delete()
-        return response.Response()
+        return response.Response({})
+
+    def patch(self, request, course_id):
+        name = request.data.get("name")
+        shift, error_response = self._get_shift(course_id, name)
+        if not shift:
+            return error_response
+
+        data = {
+            "start_date": request.data.get("new_start_date"),
+            "name": request.data.get("new_name"),
+        }
+        if not data:
+            return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": "Nothing to change"})
+        data['course_key'] = course_id
+        serial = CourseShiftSerializer(shift, data=data, partial=True)
+
+        if not serial.is_valid():
+            return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": serial.error_dict()})
+        try:
+            data = serial.validated_data
+            if data["start_date"]:
+                shift.set_start_date(data["start_date"])
+            if data["name"]:
+                shift.set_name(data["name"])
+        except ValueError as e:
+            return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": e.message})
+        return response.Response({})
 
     def post(self, request, course_id):
-        data = {}
-        data["start_date"] = request.data.get("start_date")
-        data["name"] = request.data.get("name")
-        data['course_key'] = course_id
-        serial = CourseShiftSerializer(data=data, partial=True)
+        data = {
+            "start_date": request.data.get("start_date"),
+            "name": request.data.get("name"),
+            'course_key': course_id
+        }
+        serial = CourseShiftSerializer(data=data)
         if serial.is_valid():
             kwargs = serial.validated_data
         else:
@@ -122,4 +150,4 @@ class CourseShiftDetailView(views.APIView):
         except Exception as e:
             error_message = e.message or str(e)
             return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": error_message})
-        return response.Response()
+        return response.Response({})

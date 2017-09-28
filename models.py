@@ -67,7 +67,29 @@ class CourseShiftGroup(models.Model):
     def settings(self, value):
         self._shift_settings = value
 
+    def set_name(self, value):
+        if self.name == value:
+            return
+        same_name_shifts = CourseShiftGroup.objects.filter(course_key=self.course_key, course_user_group__name=value)
+        if same_name_shifts.first():
+            raise ValueError("Shift with name {} already exists for {}".format(value, str(self.course_key)))
+        self.course_user_group.name = value
+        self.course_user_group.save()
+
+    def set_start_date(self, value):
+        if self.start_date == value:
+            return
+        same_start_date_shifts = CourseShiftGroup.objects.filter(course_key=self.course_key, start_date=value)
+        if same_start_date_shifts.first():
+            raise ValueError("Shift with start date {} already exists for {}".format(str(value), str(self.course_key)))
+        self.start_date = value
+        self.save()
+
     def get_shifted_date(self, user, date):
+        """
+        Returns shifted due or start date according to
+        the settings
+        """
         if user not in self.users.all():
             raise ValueError("User '{}' is not in shift '{}'".format(
                 user.username,

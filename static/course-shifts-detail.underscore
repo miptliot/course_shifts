@@ -20,7 +20,7 @@
                  <label for="course-shift-name"><%- gettext("Name of shift")%> </label>
 
                  <br>
-                 <input name="course-shift-date" type="date">
+                 <input name="course-shift-date" type="date" placeholder="YYYY-MM-DD">
                  <label for="course-shift-date"><%- gettext("Start date of shift")%></label>
                  <table>
                     <tr>
@@ -37,9 +37,13 @@
                     </tr>
                  </table>
             </div>
-            <button type="submit" class="btn-blue upload-csv-button" id="change-post-shift-button">
+            <button type="submit" class="btn-blue" id="change-create-shift-button">
                 <%- gettext("Submit") %>
             </button>
+            <button type="submit" id="delete-shift-button">
+                <%- gettext("Delete") %>
+            </button>
+
         </fieldset>
         <div class="bulk-exception-results hidden"></div>
     </div>
