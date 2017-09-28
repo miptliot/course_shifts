@@ -148,6 +148,34 @@
                             return ext.fail_with_error('course-shifts', 'Error deleting shift:', xhr);
                         }
                     })
+                });
+
+                ext.$delete_shift_button = ext.$course_shifts_view.find("#course-shift-add-user-button");
+                ext.$delete_shift_button.click(function () {
+                    ext.clear_display();
+                    var select_value = ext.$course_shifts_view.find("#shift-select").val();
+                    if (select_value.includes(ext.create_shift_code)){
+                        return
+                    }
+                    var username_add = ext.$course_shifts_view.find("input[name='course-shift-username-add']");
+                    var data = {
+                        shift_name:select_value,
+                        username:username_add.attr("value")
+                    };
+
+                    return $.ajax({
+                        type: 'POST',
+                        dataType: 'json',
+                        url: ext.$course_shifts_view.data('url-membership'),
+                        data: data,
+                        success: function (data) {
+                            ext.display_response('course-shifts', data);
+                            ext.render_shift_view();
+                        },
+                        error: function (xhr) {
+                            return ext.fail_with_error('course-shifts', 'Error adding user:', xhr);
+                        }
+                    })
                 })
 
             };

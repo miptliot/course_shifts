@@ -50,7 +50,10 @@ from openedx.core.djangolib.js_utils import dump_js_escaped_json, js_escaped_str
         % endif
     </div>
     <hr>
-    <div class="course-shifts-view" id="course-shifts-view" data-url-list="${section_data['course_shifts_list_url']}" data-url-detail="${section_data['course_shifts_detail_url']}">
+    <div class="course-shifts-view" id="course-shifts-view"
+         data-url-list="${section_data['course_shifts_list_url']}"
+         data-url-detail="${section_data['course_shifts_detail_url']}"
+         data-url-membership="${section_data['course_shifts_membership_url']}">
     </div>
     <div class="request-response"></div>
     <div class="request-response-error"></div>

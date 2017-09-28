@@ -43,7 +43,14 @@
             <button type="submit" id="delete-shift-button">
                 <%- gettext("Delete") %>
             </button>
-
+            <hr>
+            <input name="course-shift-username-add" type="text">
+            <br>
+            <label for="course-shift-username-add"><%- gettext("User to add")%> </label>
+            <br>
+             <button type="submit" id="course-shift-add-user-button">
+                <%- gettext("Add user") %>
+            </button>
         </fieldset>
         <div class="bulk-exception-results hidden"></div>
     </div>

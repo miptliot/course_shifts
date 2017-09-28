@@ -5,7 +5,7 @@ from openedx.core.lib.api.permissions import IsStaffOrOwner
 from .models import CourseShiftSettings, CourseShiftGroup
 from .serializers import CourseShiftSettingsSerializer, CourseShiftSerializer
 from .manager import CourseShiftManager
-
+from django.contrib.auth.models import User
 
 class CourseShiftSettingsView(views.APIView):
     """
@@ -150,4 +150,28 @@ class CourseShiftDetailView(views.APIView):
         except Exception as e:
             error_message = e.message or str(e)
             return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": error_message})
+        return response.Response({})
+
+
+class CourseShiftUserView(views.APIView):
+
+    def post(self, request, course_id):
+        course_key = CourseKey.from_string(course_id)
+        shift_name = request.data.get("shift_name")
+        shift_manager = CourseShiftManager(course_key)
+        shift = shift_manager.get_shift(shift_name)
+        if not shift:
+            message = "Shift with name {} not found for {}".format(shift_name, course_key)
+            return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": message})
+
+        username = request.data.get("username")
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            message = "User with username {} not found".format(username)
+            return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": message})
+        try:
+            shift_manager.enroll_user(user, shift, forced=True)
+        except ValueError as e:
+            return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": e.message})
         return response.Response({})
