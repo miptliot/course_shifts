@@ -26,7 +26,7 @@
                     enroll_before_days: ext.$enroll_before_days.val(),
                     is_autostart: ext.$is_autostart.filter(":checked").val()
                 };
-                if (ext.$autostart_period_days){
+                if (!(ext.$autostart_period_days.attr("disabled"))){
                     sendData['autostart_period_days'] = ext.$autostart_period_days.val();
                 }
                 return $.ajax({
@@ -35,10 +35,11 @@
                     url: ext.$settings_submit.data('endpoint'),
                     data: sendData,
                     success: function(data) {
-                        return ext.display_response('course-shifts', data);
+                        ext.render_shift_view();
+                        return ext.display_response('course-shifts-settings-editor', data);
                     },
                     error: function(xhr) {
-                        return ext.fail_with_error('course-shifts', 'Error changing settings', xhr);
+                        return ext.fail_with_error('course-shifts-settings-editor', 'Error changing settings', xhr);
                     }
                 });
             });
@@ -46,6 +47,7 @@
             this.autostart_change = function (){
                 var value = ext.$is_autostart.filter(":checked").val();
                 if (value.includes("True")){
+                    ext.$autostart_period_days.val(ext.$autostart_period_days.data('default-value'));
                     ext.$autostart_period_days.attr("disabled", false);
                 }
                 if (value.includes("False")){
@@ -62,6 +64,10 @@
 
         course_shifts.prototype.render_shift_view = function() {
             var ext = this;
+            if (ext.$is_autostart.filter(":checked").val().includes("True")){
+                ext.$course_shifts_view.html('');
+                return
+            }
             var render = function (data) {
                 var rendered_shifts = edx.HtmlUtils.template($('#course-shifts-detail-tpl').text())({
                     shifts_list: data
@@ -93,11 +99,11 @@
                             url: ext.$course_shifts_view.data('url-detail'),
                             data: data,
                             success: function (data) {
-                                ext.display_response('course-shifts', data);
+                                ext.display_response('course-shift-edit-view', data);
                                 ext.render_shift_view();
                             },
                             error: function (xhr) {
-                                return ext.fail_with_error('course-shifts', 'Error getting shift data', xhr);
+                                return ext.fail_with_error('course-shift-edit-view', 'Error creating shift', xhr);
                             }
                         });
                     }
@@ -116,11 +122,11 @@
                             url: ext.$course_shifts_view.data('url-detail'),
                             data: data,
                             success: function (data) {
-                                ext.display_response('course-shifts', data);
+                                ext.display_response('course-shift-edit-view', data);
                                 ext.render_shift_view();
                             },
                             error: function (xhr) {
-                                return ext.fail_with_error('course-shifts', 'Error getting shift data', xhr);
+                                return ext.fail_with_error('course-shift-edit-view', 'Error updating shift info', xhr);
                             }
                         });
                     }
@@ -141,17 +147,17 @@
                         url: ext.$course_shifts_view.data('url-detail'),
                         data: data,
                         success: function (data) {
-                            ext.display_response('course-shifts', data);
+                            ext.display_response('course-shift-edit-view', data);
                             ext.render_shift_view();
                         },
                         error: function (xhr) {
-                            return ext.fail_with_error('course-shifts', 'Error deleting shift:', xhr);
+                            return ext.fail_with_error('course-shift-edit-view', 'Error deleting shift', xhr);
                         }
                     })
                 });
 
-                ext.$delete_shift_button = ext.$course_shifts_view.find("#course-shift-add-user-button");
-                ext.$delete_shift_button.click(function () {
+                ext.$user_add_button= ext.$course_shifts_view.find("#course-shift-add-user-button");
+                ext.$user_add_button.click(function () {
                     ext.clear_display();
                     var select_value = ext.$course_shifts_view.find("#shift-select").val();
                     if (select_value.includes(ext.create_shift_code)){
@@ -169,15 +175,15 @@
                         url: ext.$course_shifts_view.data('url-membership'),
                         data: data,
                         success: function (data) {
-                            ext.display_response('course-shifts', data);
+                            ext.display_response('course-shift-view-user', data);
                             ext.render_shift_view();
                         },
                         error: function (xhr) {
-                            return ext.fail_with_error('course-shifts', 'Error adding user:', xhr);
+                            return ext.fail_with_error('course-shift-view-user', 'Error adding user', xhr);
                         }
                     })
-                })
-
+                });
+                ext.clear_display();
             };
 
             return $.ajax({
@@ -195,26 +201,32 @@
 
         course_shifts.prototype.render_shift = function(name){
             var ext = this;
+            ext.clear_display();
             var render_shift_info = function(data){
-                    var name_field = ext.$course_shifts_view.find("input[name='course-shift-name']");
-                    var date_field = ext.$course_shifts_view.find("input[name='course-shift-date']");
-                    var enroll_start_field = ext.$course_shifts_view.find("#current-shift-enrollement-start");
-                    var enroll_finish_field = ext.$course_shifts_view.find("#current-shift-enrollement-finish");
-                    var users_count = ext.$course_shifts_view.find("#current-shift-users-count");
-                    if ($.isEmptyObject(data)){
-                        name_field.attr("value", '');
-                        date_field.attr("value", '');
-                        enroll_start_field.html('');
-                        enroll_finish_field.html('');
-                        users_count.html('');
-                        return;
-                    }
-                    name_field.attr("value", data["name"]);
-                    date_field.attr("value", data["start_date"]);
-                    enroll_start_field.html(data["enroll_start"]);
-                    enroll_finish_field.html(data["enroll_finish"]);
-                    users_count.html(data["users_count"]);
-                };
+                var name_field = ext.$course_shifts_view.find("input[name='course-shift-name']");
+                var date_field = ext.$course_shifts_view.find("input[name='course-shift-date']");
+                var enroll_start_field = ext.$course_shifts_view.find("#current-shift-enrollement-start");
+                var enroll_finish_field = ext.$course_shifts_view.find("#current-shift-enrollement-finish");
+                var users_count = ext.$course_shifts_view.find("#current-shift-users-count");
+                var create_shift_disable = ext.$course_shifts_view.find(".create-shift-disable");
+                if ($.isEmptyObject(data)){
+                    name_field.attr("value", '');
+                    date_field.attr("value", '');
+                    enroll_start_field.html('');
+                    enroll_finish_field.html('');
+                    users_count.html('');
+                    create_shift_disable.attr("disabled", true);
+                    return;
+                }
+                name_field.attr("value", data["name"]);
+                date_field.attr("value", data["start_date"]);
+                enroll_start_field.html(data["enroll_start"]);
+                enroll_finish_field.html(data["enroll_finish"]);
+                users_count.html(data["users_count"]);
+                if (create_shift_disable.attr("disabled")){
+                    create_shift_disable.attr("disabled", false);
+                }
+            };
             if (name.includes(ext.create_shift_code)){
                 render_shift_info({});
                 return;
@@ -237,6 +249,7 @@
         course_shifts.prototype.shift_view_submit_clicked = function (ext) {
 
         };
+
         course_shifts.prototype.clear_display = function() {
             this.$section.find('.request-response-error').empty().hide();
             return this.$section.find('.request-response').empty().hide();

@@ -7,12 +7,12 @@ from .serializers import CourseShiftSettingsSerializer, CourseShiftSerializer
 from .manager import CourseShiftManager
 from django.contrib.auth.models import User
 
+
 class CourseShiftSettingsView(views.APIView):
     """
     Allows instructor to edit course shift settings
     """
-    #permission_classes = (permissions.IsAuthenticated, IsStaffOrOwner)
-    permissions = tuple()
+    permission_classes = (permissions.IsAuthenticated, IsStaffOrOwner)
 
     def get(self, request, course_id):
         course_key = CourseKey.from_string(course_id)
@@ -63,8 +63,9 @@ class CourseShiftListView(generics.ListAPIView):
 
 class CourseShiftDetailView(views.APIView):
     """
-    Allows instructor to watch, to create and to delete course_shifts
+    Allows instructor to watch, to create, to modify and to delete course shifts
     """
+    permission_classes = (permissions.IsAuthenticated, IsStaffOrOwner)
 
     def _get_shift(self, course_id, name):
         course_key = CourseKey.from_string(course_id)
@@ -154,6 +155,10 @@ class CourseShiftDetailView(views.APIView):
 
 
 class CourseShiftUserView(views.APIView):
+    """
+    Allows instructor to add users to shifts
+    """
+    permission_classes = (permissions.IsAuthenticated, IsStaffOrOwner)
 
     def post(self, request, course_id):
         course_key = CourseKey.from_string(course_id)
