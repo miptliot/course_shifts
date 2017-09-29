@@ -110,6 +110,7 @@ from web_fragments.fragment import Fragment
 
 from ..entrance_exams import user_can_skip_entrance_exam
 from ..module_render import get_module_for_descriptor, get_module, get_module_by_usage_id
+from openedx.core.djangoapps.course_shifts import get_course_active_shifts_json
 
 log = logging.getLogger("edx.courseware")
 
@@ -713,8 +714,10 @@ def course_about(request, course_id):
 
         # Overview
         overview = CourseOverview.get_from_id(course.id)
+        active_shifts_json = get_course_active_shifts_json(course.id)
 
         context = {
+            'course_shifts': active_shifts_json,
             'course': course,
             'course_details': course_details,
             'staff_access': staff_access,

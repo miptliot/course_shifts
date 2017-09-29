@@ -1,9 +1,11 @@
 from django.core.urlresolvers import reverse
 from django.utils.translation import ugettext as _
 
-from .models import CourseShiftSettings
-from .serializers import CourseShiftSettingsSerializer
+from opaque_keys.edx.keys import CourseKey
 
+from .models import CourseShiftSettings
+from .serializers import CourseShiftSettingsSerializer, CourseShiftSerializer
+from .manager import CourseShiftManager
 
 def _section_course_shifts(course, access):
 
@@ -29,3 +31,10 @@ def _section_course_shifts(course, access):
         'current_settings': serial_settings.data,
     }
     return section_data
+
+
+def get_course_active_shifts_json(course_key):
+    shift_manager = CourseShiftManager(course_key)
+    active_shifts = shift_manager.get_active_shifts()
+    serializer = CourseShiftSerializer(active_shifts, many=True)
+    return serializer.data

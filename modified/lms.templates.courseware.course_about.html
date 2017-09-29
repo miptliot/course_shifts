@@ -28,6 +28,15 @@ from openedx.core.lib.courses import course_image_url
       event.preventDefault();
     });
 
+    %if course_shifts:
+      $(".course-shift-selection").change(function (event) {
+        var select_value = $(".course-shift-selection").val();
+        var hidden_field = $("#class_enroll_form .course-shift");
+        hidden_field.attr("value", select_value);
+        console.log(hidden_field);
+        console.log(select_value);
+      });
+    %endif
     % if can_add_course_to_cart:
       add_course_complete_handler = function(jqXHR, textStatus) {
         if (jqXHR.status == 200) {
@@ -179,6 +188,15 @@ from openedx.core.lib.courses import course_image_url
           <a href="${reg_href}" class="${href_class}">
             ${_("Enroll in {course_name}").format(course_name=course.display_number_with_default) | h}
           </a>
+          <p class="important-dates-item-title">${_("Choose course start date:")}</p>
+          % if course_shifts:
+              <select class="course-shift-selection">
+                % for shift in course_shifts:
+                  <option value="${shift["name"]}">${shift["start_date"]}</option>
+                % endfor
+              </select>
+          % endif
+
           <div id="register_error"></div>
         %endif
         </div>
@@ -333,6 +351,9 @@ from openedx.core.lib.courses import course_image_url
         <legend class="sr">${_("Enroll")}</legend>
         <input name="course_id" type="hidden" value="${course.id | h}">
         <input name="enrollment_action" type="hidden" value="enroll">
+        %if course_shifts:
+            <input name="course_shift" class="course-shift" type="hidden" value="${course_shifts[0]['name']}">
+        %endif
       </fieldset>
       <div class="submit">
         <input name="submit" type="submit" value="${_('enroll')}">
