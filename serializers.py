@@ -73,5 +73,4 @@ class CourseShiftSerializer(serializers.ModelSerializer):
                 continue
             message = u";".join(unicode(x) for x in errors[key])
             errors_by_key[key] = message
-        print(errors_by_key)
         return errors_by_key

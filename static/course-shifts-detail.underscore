@@ -1,4 +1,4 @@
-<div class="course-shifts-detail" id="course-shift-view">
+<div class="course-shifts-detail">
     <h4 class="hd hd-4"><%- gettext("Shifts Editing View") %></h4>
     <div id="course-shift-edit-view">
         <fieldset>
@@ -44,8 +44,6 @@
                 <%- gettext("Delete") %>
             </button>
         </fieldset>
-        <div class="request-response msg"></div>
-        <div class="request-response-error msg msg-error"></div>
     </div>
     <hr>
     <div id="course-shift-view-user">
@@ -56,8 +54,5 @@
         <button type="submit" id="course-shift-add-user-button" class="create-shift-disable">
            <%- gettext("Add user") %>
         </button>
-        <div class="request-response msg"></div>
-        <div class="request-response-error msg msg-error"></div>
-
     </div>
 </div>

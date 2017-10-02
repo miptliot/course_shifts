@@ -72,7 +72,8 @@
                 var rendered_shifts = edx.HtmlUtils.template($('#course-shifts-detail-tpl').text())({
                     shifts_list: data
                 });
-                ext.$course_shifts_view.html(rendered_shifts["text"]);
+                var template_place = ext.$course_shifts_view.find("#course-shifts-view-template");
+                template_place.html(rendered_shifts["text"]);
                 var select_shift = ext.$section.find("#shift-select");
                 select_shift.change(function () {
                     ext.render_shift(this.value);
@@ -99,11 +100,11 @@
                             url: ext.$course_shifts_view.data('url-detail'),
                             data: data,
                             success: function (data) {
-                                ext.display_response('course-shift-edit-view', data);
                                 ext.render_shift_view();
+                                ext.display_response('course-shifts-view', data);
                             },
                             error: function (xhr) {
-                                return ext.fail_with_error('course-shift-edit-view', 'Error creating shift', xhr);
+                                return ext.fail_with_error('course-shifts-view', 'Error creating shift', xhr);
                             }
                         });
                     }
@@ -122,11 +123,12 @@
                             url: ext.$course_shifts_view.data('url-detail'),
                             data: data,
                             success: function (data) {
-                                ext.display_response('course-shift-edit-view', data);
                                 ext.render_shift_view();
+                                ext.display_response('course-shifts-view', data);
+
                             },
                             error: function (xhr) {
-                                return ext.fail_with_error('course-shift-edit-view', 'Error updating shift info', xhr);
+                                return ext.fail_with_error('course-shifts-view', 'Error updating shift info', xhr);
                             }
                         });
                     }
@@ -147,11 +149,11 @@
                         url: ext.$course_shifts_view.data('url-detail'),
                         data: data,
                         success: function (data) {
-                            ext.display_response('course-shift-edit-view', data);
                             ext.render_shift_view();
+                            ext.display_response('course-shifts-view', data);
                         },
                         error: function (xhr) {
-                            return ext.fail_with_error('course-shift-edit-view', 'Error deleting shift', xhr);
+                            return ext.fail_with_error('course-shifts-view', 'Error deleting shift', xhr);
                         }
                     })
                 });
@@ -175,11 +177,11 @@
                         url: ext.$course_shifts_view.data('url-membership'),
                         data: data,
                         success: function (data) {
-                            ext.display_response('course-shift-view-user', data);
                             ext.render_shift_view();
+                            ext.display_response('course-shifts-view', data);
                         },
                         error: function (xhr) {
-                            return ext.fail_with_error('course-shift-view-user', 'Error adding user', xhr);
+                            return ext.fail_with_error('course-shifts-view', 'Error adding user', xhr);
                         }
                     })
                 });
@@ -280,7 +282,7 @@
             if ($.type(error_message) != 'string'){
                 error_message = '';
                 for (var key in data.error){
-                    error_message += key + ":" +data.error[key] +"<br>";
+                    error_message += key + ":" +data.error[key] +";";
                 }
             }
             message += ': ' + error_message;
