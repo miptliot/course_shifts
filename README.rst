@@ -22,11 +22,12 @@ Every course student is associated with some CourseUserGroup, and provider check
 Installation
 ------------
 
-1. 'course_shifts' should be added to the INSTALLED_APPS variable:
+1. 'course_shifts' should be added to the INSTALLED_APPS variable, feature should be enabled:
 
 ::
 
   INSTALLED_APPS += ('openedx.core.djangoapps.course_shifts',)
+  FEATURES["ENABLE_COURSE_SHIFTS"] = True
 
 2. course_shifts.provider.CourseShiftOverrideProvider should be added to the FIELD_OVERRIDE_PROVIDERS
 
@@ -38,10 +39,13 @@ Installation
 
 Note that if feature INDIVIDUAL_DUE_DATES is also used, than IndividualStudentOverrideProvider must be added before CourseShiftOverrideProvider.
 
-3. Add urls to the urls.py in lms/ and cms/:
+3. Run course_shifts migrations
 
 ::
 
-  urlpatterns += (
-      url(r'^course_shifts/', include('openedx.core.djangoapps.course_shifts.urls', app_name="course_shifts", namespace="course_shifts")),
-  )
+  python manage.py lms migrate course_shifts --settings=YOUR_SETTINGS
+
+
+4. Pull `this
+<https://github.com/zimka/edx-platform-1/tree/course_shifts>`_
+branch from github. Branch is based on edx release 'open-release/ficus.2'. It contains all necessary changes in edx-platform.

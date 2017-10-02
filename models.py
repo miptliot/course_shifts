@@ -82,6 +82,8 @@ class CourseShiftGroup(models.Model):
         same_start_date_shifts = CourseShiftGroup.objects.filter(course_key=self.course_key, start_date=value)
         if same_start_date_shifts.first():
             raise ValueError("Shift with start date {} already exists for {}".format(str(value), str(self.course_key)))
+        delta_days = (value - self.start_date).days
+        self.days_shift += delta_days
         self.start_date = value
         self.save()
 
