@@ -2,16 +2,16 @@
 Tests for course shifts
 """
 # pylint: disable=no-member
-from nose.plugins.attrib import attr
 import datetime
-
-from opaque_keys.edx.locations import SlashSeparatedCourseKey
-from student.tests.factories import UserFactory, RegistrationFactory, UserProfileFactory
+from django.db import IntegrityError
+from nose.plugins.attrib import attr
+from student.tests.factories import UserFactory
 from xmodule.modulestore.tests.django_utils import TEST_DATA_MIXED_MODULESTORE, ModuleStoreTestCase
 from xmodule.modulestore.tests.factories import ToyCourseFactory
-from django.db import IntegrityError
-from ..models import CourseShiftGroup, CourseShiftGroupMembership, CourseUserGroup, CourseShiftSettings
+
 from ..manager import CourseShiftManager
+from ..models import CourseShiftGroup, CourseShiftGroupMembership, CourseUserGroup, CourseShiftSettings
+
 
 def date_shifted(days):
     return (datetime.datetime.now() + datetime.timedelta(days=days)).date()
@@ -78,7 +78,7 @@ class TestCourseShiftGroup(ModuleStoreTestCase):
             "Should be only {}, found:{}".format(
                 str(test_shift_group),
                 str(shift_groups)
-        ))
+            ))
 
         self._delete_all_shifts()
 
@@ -123,8 +123,8 @@ class TestCourseShiftGroup(ModuleStoreTestCase):
                                                              start_date=date_shifted(1))
         groups = CourseShiftGroup.get_course_shifts(self.course_key)
         correct = test_shift_group2 in groups and \
-            test_shift_group in groups and \
-            len(groups) == 2
+                  test_shift_group in groups and \
+                  len(groups) == 2
 
         self.assertTrue(correct, "Should be test_shift_group and test_shift_group2, found:{}".format(
             str(groups)
@@ -212,7 +212,7 @@ class TestCourseShiftGroupMembership(ModuleStoreTestCase):
         Tests that there can't be two membership for user in same course_key
         """
         group2, created = CourseShiftGroup.create("test_shift_group2", self.course_key,
-            start_date=date_shifted(1))
+                                                  start_date=date_shifted(1))
         CourseShiftGroupMembership.transfer_user(self.user, None, self.group)
         with self.assertRaises(ValueError) as context_manager:
             CourseShiftGroupMembership.objects.create(user=self.user, course_shift_group=group2)
@@ -317,7 +317,7 @@ class TestCourseShiftGroupMembership(ModuleStoreTestCase):
         membership = CourseShiftGroupMembership.get_user_membership(self.user, self.course_key)
         self.assertTrue(membership.course_shift_group == self.group, "Membershift group:{}".format(
             str(membership.course_shift_group)
-            ))
+        ))
 
 
 class EnrollClsFields(object):
@@ -416,7 +416,8 @@ class TestCourseShiftSettings(ModuleStoreTestCase, EnrollClsFields):
         self._settings_setup(period=custom_period, autostart=True)
         course_shifts = CourseShiftGroup.get_course_shifts(self.course_key)
         shifts_number = self._number_of_shifts(custom_period)
-        self.assertTrue(len(course_shifts) == shifts_number, "Must be {} shift, found: {}".format(shifts_number, str(course_shifts)))
+        self.assertTrue(len(course_shifts) == shifts_number,
+                        "Must be {} shift, found: {}".format(shifts_number, str(course_shifts)))
 
     def test_autostart_generation_two(self):
         """
@@ -459,7 +460,6 @@ class TestCourseShiftSettings(ModuleStoreTestCase, EnrollClsFields):
 
 @attr(shard=2)
 class TestCourseShiftManager(ModuleStoreTestCase, EnrollClsFields):
-
     def setUp(self):
         super(TestCourseShiftManager, self).setUp()
         date = datetime.datetime.now() - datetime.timedelta(days=14)
@@ -522,7 +522,7 @@ class TestCourseShiftManager(ModuleStoreTestCase, EnrollClsFields):
         test_a_shift_group, created = CourseShiftGroup.create("test_shift_group_t1", self.course_key)
         CourseShiftGroupMembership.transfer_user(user, None, test_a_shift_group)
         shift_group = shift_manager.get_user_shift(user)
-        self.assertTrue(shift_group==test_a_shift_group, "User shift group is {}, should be {}".format(
+        self.assertTrue(shift_group == test_a_shift_group, "User shift group is {}, should be {}".format(
             str(shift_group),
             str(test_a_shift_group)
         ))
@@ -584,7 +584,7 @@ class TestCourseShiftManager(ModuleStoreTestCase, EnrollClsFields):
             str(test_group),
             str(groups)
         ))
-        self.assertTrue(test_group_same==test_group, "Groups different: {} and {}".format(
+        self.assertTrue(test_group_same == test_group, "Groups different: {} and {}".format(
             str(test_group),
             str(test_group_same)
         ))
@@ -592,8 +592,8 @@ class TestCourseShiftManager(ModuleStoreTestCase, EnrollClsFields):
         test_group_other = shift_manager.create_shift(date_shifted(1))
         groups = shift_manager.get_all_shifts()
         correct = test_group_same in groups \
-            and test_group_other in groups \
-            and len(groups) == 2
+                  and test_group_other in groups \
+                  and len(groups) == 2
         self.assertTrue(correct, "Should be {} and {}, found: {}".format(
             str(test_group),
             str(test_group_other),
@@ -628,7 +628,7 @@ class TestCourseShiftManager(ModuleStoreTestCase, EnrollClsFields):
             test_group_error = shift_manager.create_shift(name=name, start_date=date_shifted(1))
 
         test_group2 = shift_manager.create_shift()
-        self.assertTrue(test_group==test_group2, "Different groups: {} {}".format(
+        self.assertTrue(test_group == test_group2, "Different groups: {} {}".format(
             str(test_group),
             str(test_group2)
         ))
@@ -701,7 +701,7 @@ class TestCourseShiftManager(ModuleStoreTestCase, EnrollClsFields):
                         "Start date is {}, must be {}".format(
                             str(group_future.start_date),
                             str(date_shifted(14))
-        ))
+                        ))
         active_groups = shift_manager.get_active_shifts()
         active_user_groups = shift_manager.get_active_shifts(self.user)
 
@@ -780,7 +780,7 @@ class TestCourseShiftManager(ModuleStoreTestCase, EnrollClsFields):
         group = shift_manager.create_shift(date_shifted(-20))
         active_groups = shift_manager.get_active_shifts(self.user)
         self.assertTrue(
-            not(group in active_groups),
+            not (group in active_groups),
             "Active groups : {}".format(str(active_groups))
         )
         with self.assertRaises(ValueError):
@@ -797,13 +797,13 @@ class TestCourseShiftManager(ModuleStoreTestCase, EnrollClsFields):
         group = shift_manager.create_shift(date_shifted(-20))
         active_groups = shift_manager.get_active_shifts()
         self.assertTrue(
-            not(group in active_groups),
+            not (group in active_groups),
             "Active groups : {}".format(str(active_groups))
         )
         shift_manager.enroll_user(self.user, group, forced=True)
         user_shift = shift_manager.get_user_shift(self.user)
         self.assertTrue(
-            user_shift==group,
+            user_shift == group,
             "User shift:{}, should be {}".format(
                 str(user_shift),
                 str(group)

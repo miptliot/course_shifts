@@ -1,8 +1,7 @@
 from datetime import timedelta
-
 from django.utils import timezone
-from models import CourseShiftGroup, CourseShiftGroupMembership, CourseShiftSettings
 
+from models import CourseShiftGroup, CourseShiftGroupMembership, CourseShiftSettings
 
 date_now = lambda: timezone.now().date()
 
@@ -100,7 +99,7 @@ class CourseShiftManager(object):
             return membership
 
         user_can_be_enrolled = forced
-        if not shift: # unenroll is possible at any time
+        if not shift:  # unenroll is possible at any time
             user_can_be_enrolled = True
         active_shifts = []
         if not user_can_be_enrolled:

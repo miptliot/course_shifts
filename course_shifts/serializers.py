@@ -1,5 +1,6 @@
-from rest_framework import serializers
 from openedx.core.lib.api.serializers import CourseKeyField
+from rest_framework import serializers
+
 from .models import CourseShiftSettings, CourseShiftGroup
 
 

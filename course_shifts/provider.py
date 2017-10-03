@@ -1,5 +1,5 @@
-from datetime import timedelta
 from lms.djangoapps.courseware.field_overrides import FieldOverrideProvider
+
 from .manager import CourseShiftManager
 
 
@@ -78,7 +78,7 @@ def _get_default_scoped_field_value(block, name):
     # It is slower and stranger than the one with fallback
     safe_scope_names = ("preferences", "user_info")
     scope_field_data_dict = block._field_data._scope_mappings
-    scope_name_dict = dict((x.name,x) for x in scope_field_data_dict.keys())
+    scope_name_dict = dict((x.name, x) for x in scope_field_data_dict.keys())
 
     for scope_name in safe_scope_names:
         scope = scope_name_dict.get(scope_name)

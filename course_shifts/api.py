@@ -1,11 +1,11 @@
-from rest_framework import views, permissions, response, status, generics
+from django.contrib.auth.models import User
 from opaque_keys.edx.keys import CourseKey
 from openedx.core.lib.api.permissions import IsStaffOrOwner
+from rest_framework import views, permissions, response, status, generics
 
+from .manager import CourseShiftManager
 from .models import CourseShiftSettings, CourseShiftGroup
 from .serializers import CourseShiftSettingsSerializer, CourseShiftSerializer
-from .manager import CourseShiftManager
-from django.contrib.auth.models import User
 
 
 class CourseShiftSettingsView(views.APIView):
@@ -24,7 +24,7 @@ class CourseShiftSettingsView(views.APIView):
 
     def post(self, request, course_id):
         data = dict(request.data.iteritems())
-        data = dict((x,str(data[x])) for x in data)
+        data = dict((x, str(data[x])) for x in data)
         data['course_key'] = course_id
         serial_shift_settings = CourseShiftSettingsSerializer(data=data, partial=True)
         if serial_shift_settings.is_valid():
