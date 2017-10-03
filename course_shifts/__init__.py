@@ -6,15 +6,14 @@ from .models import CourseShiftSettings
 from .serializers import CourseShiftSettingsSerializer, CourseShiftSerializer
 
 
-def _section_course_shifts(course, access):
-    course_key = course.id
-    course_id = str(course_key)
+def section_course_shifts(course, access):
+    course_id = str(course.id)
     url_settings = reverse('course_shifts:settings', kwargs={"course_id": course_id})
     url_list = reverse('course_shifts:list', kwargs={"course_id": course_id})
     url_detail = reverse('course_shifts:detail', kwargs={"course_id": course_id})
     url_membership = reverse('course_shifts:membership', kwargs={"course_id": course_id})
 
-    current_settings = CourseShiftSettings.get_course_settings(course_key)
+    current_settings = CourseShiftSettings.get_course_settings(course.id)
     if not current_settings.is_shift_enabled:
         return {}
     serial_settings = CourseShiftSettingsSerializer(current_settings)
