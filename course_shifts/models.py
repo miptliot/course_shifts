@@ -47,6 +47,7 @@ class CourseShiftGroup(models.Model):
 
     class Meta:
         unique_together = ('course_key', 'start_date',)
+        app_label = 'course_shifts'
 
     @property
     def users(self):
@@ -145,7 +146,11 @@ class CourseShiftGroup(models.Model):
         Creates new CourseShiftGroup.
         If shift with (name, course_key) combination already exists returns this shift
         """
-        course_user_group, created_group = CourseUserGroup.create(name=name, course_id=course_key)
+        course_user_group, created_group = CourseUserGroup.create(
+            name=name,
+            course_id=course_key,
+            group_type=CourseUserGroup.SHIFT
+        )
         if not created_group:
             shift = CourseShiftGroup.objects.get(course_user_group=course_user_group)
             if shift.name != name:
@@ -188,6 +193,9 @@ class CourseShiftGroupMembership(models.Model):
     """
     user = models.ForeignKey(User, related_name="shift_membership")
     course_shift_group = models.ForeignKey(CourseShiftGroup)
+
+    class Meta:
+        app_label = 'course_shifts'
 
     @property
     def course_key(self):
@@ -328,32 +336,36 @@ class CourseShiftSettings(models.Model):
     is_autostart = models.BooleanField(
         default=True,
         help_text="Are groups generated automatically with period "
-                  "or according to the manually set plan")
+        "or according to the m  anually set plan"
+    )
 
     autostart_period_days = models.PositiveIntegerField(
         default=28,
         db_column='autostart_period_days',
-        help_text="Number of days between new automatically generated shifts." \
-                  "Used only in autostart mode.",
+        help_text="Number of days between new automatically generated shifts."\
+        "Used only in autostart mode.",
         null=True,
         validators=[MinValueValidator(0)]
     )
 
     enroll_before_days = models.PositiveIntegerField(
         default=14,
-        help_text="Days before shift start when student can enroll already." \
-                  "E.g. if shift starts at 01/20/2020 and value is 5 then shift will be" \
-                  "available from 01/15/2020.",
+        help_text="Days before shift start when student can enroll already."\
+        "E.g. if shift starts at 01/20/2020 and value is 5 then shift will be"\
+        "available from 01/15/2020.",
         validators=[MinValueValidator(0)]
     )
 
     enroll_after_days = models.PositiveIntegerField(
         default=7,
         help_text="Days after shift start when student still can enroll." \
-                  "E.g. if shift starts at 01/20/2020 and value is 10 then shift will be" \
-                  "available till 01/20/2020",
+        "E.g. if shift starts at 01/20/2020 and value is 10 then shift will be" \
+        "available till 01/20/2020",
         validators=[MinValueValidator(0)]
     )
+
+    class Meta:
+        app_label = 'course_shifts'
 
     def __init__(self, *args, **kwargs):
         super(CourseShiftSettings, self).__init__(*args, **kwargs)
@@ -369,9 +381,14 @@ class CourseShiftSettings(models.Model):
         return shifts[0].start_date
 
     @property
+    def course(self):
+        if not hasattr(self, "_course"):
+            self._course = modulestore().get_course(self.course_key)
+        return self._course
+
+    @property
     def course_start_date(self):
-        course = modulestore().get_course(self.course_key)
-        return course.start.date()
+        return self.course.start.date()
 
     @classmethod
     def get_course_settings(cls, course_key):
@@ -441,13 +458,12 @@ class CourseShiftSettings(models.Model):
                 course_key=self.course_key
             )
             if created:
-                log.info(
-                    "Shift {} automatically created, launch date is {}; start date is {}, enroll_before is {}".format(
-                        str(group),
-                        str(launch_date),
-                        str(start_date),
-                        str(self.enroll_before_days)
-                    ))
+                log.info("Shift {} automatically created, launch date is {}; start date is {}, enroll_before is {}".format(
+                    str(group),
+                    str(launch_date),
+                    str(start_date),
+                    str(self.enroll_before_days)
+                ))
             start_date = self.get_next_autostart_date()
             launch_date = self._calculate_launch_date(start_date)
 

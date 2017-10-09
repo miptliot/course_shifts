@@ -1,7 +1,9 @@
 from datetime import timedelta
-from django.utils import timezone
 
-from models import CourseShiftGroup, CourseShiftGroupMembership, CourseShiftSettings
+from django.conf import settings
+from django.utils import timezone
+from .models import CourseShiftGroup, CourseShiftGroupMembership, CourseShiftSettings
+from .serializers import CourseShiftSettingsSerializer
 
 date_now = lambda: timezone.now().date()
 
@@ -12,6 +14,7 @@ class CourseShiftManager(object):
     shifts for given course: user transfer between shifts, shift creation,
     data about available shifts. Supposed to be used outside the app in edx
     """
+    SHIFT_COURSE_FIELD_NAME = "enable_course_shifts"
 
     def __init__(self, course_key):
         self.course_key = course_key
@@ -19,13 +22,21 @@ class CourseShiftManager(object):
 
     @property
     def is_enabled(self):
-        return self.settings.is_shift_enabled
+        course = self.settings.course
+        if self.settings.is_shift_enabled:
+            return True
+        field = self.SHIFT_COURSE_FIELD_NAME
+        if hasattr(course, field) and getattr(course, field):
+            self.settings.is_shift_enabled = True
+            self.settings.save()
+            return True
+        return False
 
     def get_user_shift(self, user):
         """
         Returns user's shift group for manager's course.
         """
-        if not self.settings.is_shift_enabled:
+        if not self.is_enabled:
             return
 
         membership = CourseShiftGroupMembership.get_user_membership(user, self.course_key)
@@ -99,7 +110,7 @@ class CourseShiftManager(object):
             return membership
 
         user_can_be_enrolled = forced
-        if not shift:  # unenroll is possible at any time
+        if not shift: # unenroll is possible at any time
             user_can_be_enrolled = True
         active_shifts = []
         if not user_can_be_enrolled:
@@ -135,3 +146,6 @@ class CourseShiftManager(object):
             days_shift=days_shift
         )
         return shift
+
+    def get_serial_settings(self):
+        return CourseShiftSettingsSerializer(self.settings)

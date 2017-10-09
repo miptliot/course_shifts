@@ -12,7 +12,7 @@ There are several differences between this app and course rerun/CCX:
 
 2. Forum is shared between all course shifts. This can be useful when there are not so much students in each shift.
 
-3. Students can use this function when they want, and therefore course schedule becomes more flexible.
+3. Students are able to change due dates if they need to, and therefore course schedule becomes more flexible.
 
 Details
 -------
@@ -48,4 +48,6 @@ Note that if feature INDIVIDUAL_DUE_DATES is also used, than IndividualStudentOv
 
 4. Pull `this
 <https://github.com/zimka/edx-platform-1/tree/course_shifts>`_
-branch from github. Branch is based on edx release 'open-release/ficus.2'. It contains all necessary changes in edx-platform.
+branch from github. Branch is based on edx release 'open-release/ficus.2' (Watch branch `diff
+<https://github.com/edx/edx-platform/compare/open-release/ficus.1...zimka:course_shifts.patch>`_
+). It contains all necessary changes in edx-platform.
