@@ -132,7 +132,7 @@ from openedx.core.djangoapps.programs.utils import ProgramProgressMeter
 from openedx.core.djangoapps.site_configuration import helpers as configuration_helpers
 from openedx.core.djangoapps.theming import helpers as theming_helpers
 from openedx.core.djangoapps.user_api.preferences import api as preferences_api
-from openedx.core.djangoapps.course_shifts.manager import CourseShiftManager
+from course_shifts.manager import CourseShiftManager
 
 
 log = logging.getLogger("edx.student")
