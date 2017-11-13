@@ -19,6 +19,7 @@ class CourseShiftOverrideProvider(FieldOverrideProvider):
     BLOCK_OVERRIDEN_CATEGORIES = (
         'chapter',
         'sequential',
+        'vertical',
     )
 
     def should_shift(self, block, name):
