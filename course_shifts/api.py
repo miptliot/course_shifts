@@ -6,21 +6,32 @@ from rest_framework import views, permissions, response, status, generics
 from .manager import CourseShiftManager
 from .models import CourseShiftSettings, CourseShiftGroup
 from .serializers import CourseShiftSettingsSerializer, CourseShiftSerializer
+from openedx.core.lib.api.permissions import ApiKeyHeaderPermission
+
+
+class CourseShiftsPermission(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return (ApiKeyHeaderPermission().has_permission(request, view) or
+            (permissions.IsAuthenticated().has_permission(request, view) and IsStaffOrOwner().has_permission(request,view))
+        )
 
 
 class CourseShiftSettingsView(views.APIView):
     """
     Allows instructor to edit course shift settings
     """
-    permission_classes = (permissions.IsAuthenticated, IsStaffOrOwner)
+    permission_classes = CourseShiftsPermission,
 
     def get(self, request, course_id):
         course_key = CourseKey.from_string(course_id)
         shift_settings = CourseShiftSettings.get_course_settings(course_key)
-        serial_shift_settings = CourseShiftSettingsSerializer(shift_settings)
-        data = serial_shift_settings.data
-        data.pop('course_key')
-        return response.Response(data=data)
+        if shift_settings.is_shift_enabled:
+            serial_shift_settings = CourseShiftSettingsSerializer(shift_settings)
+            data = serial_shift_settings.data
+            data.pop('course_key')
+            return response.Response(data=data)
+        else:
+            return response.Response({})
 
     def post(self, request, course_id):
         data = dict(request.data.iteritems())
@@ -48,14 +59,27 @@ class CourseShiftListView(generics.ListAPIView):
     Returns list of shifts for given course
     """
     serializer_class = CourseShiftSerializer
+    permission_classes = CourseShiftsPermission,
 
-    def get_queryset(self):
+    def old_get_queryset(self):
         course_id = self.kwargs['course_id']
         course_key = CourseKey.from_string(course_id)
         return CourseShiftGroup.get_course_shifts(course_key)
 
     def list(self, request, course_id):
-        queryset = self.get_queryset()
+        course_id = self.kwargs['course_id']
+        course_key = CourseKey.from_string(course_id)
+        shift_manager = CourseShiftManager(course_key)
+        username = request.query_params.get('username', None)
+        if username:
+            try:
+                user = User.objects.get(username=username)
+            except User.DoesNotExist:
+                message = "User with username {} not found".format(username)
+                return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": message})
+            queryset = shift_manager.get_active_shifts(user)
+        else:
+            queryset = shift_manager.get_all_shifts()
         serializer = CourseShiftSerializer(queryset, many=True)
         data = serializer.data
         return response.Response(data=data)
@@ -65,7 +89,7 @@ class CourseShiftDetailView(views.APIView):
     """
     Allows instructor to watch, to create, to modify and to delete course shifts
     """
-    permission_classes = (permissions.IsAuthenticated, IsStaffOrOwner)
+    permission_classes = CourseShiftsPermission,
 
     def _get_shift(self, course_id, name):
         course_key = CourseKey.from_string(course_id)
@@ -156,18 +180,17 @@ class CourseShiftDetailView(views.APIView):
 
 class CourseShiftUserView(views.APIView):
     """
-    Allows instructor to add users to shifts
+    Allows instructor to add users to shifts and check their
+    current shift
     """
-    permission_classes = (permissions.IsAuthenticated, IsStaffOrOwner)
+    permission_classes = CourseShiftsPermission,
 
     def post(self, request, course_id):
         course_key = CourseKey.from_string(course_id)
-        shift_name = request.data.get("shift_name")
         shift_manager = CourseShiftManager(course_key)
-        shift = shift_manager.get_shift(shift_name)
-        if not shift:
-            message = "Shift with name {} not found for {}".format(shift_name, course_key)
-            return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": message})
+        if not shift_manager.is_enabled:
+            message = "Shifts are not enabled for course {}".format(course_id)
+            return response.Response(status=status.HTTP_406_NOT_ACCEPTABLE, data={"error": message})
 
         username = request.data.get("username")
         try:
@@ -175,8 +198,35 @@ class CourseShiftUserView(views.APIView):
         except User.DoesNotExist:
             message = "User with username {} not found".format(username)
             return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": message})
+
+        shift_name = request.data.get("shift_name")
+        shift = shift_manager.get_shift(shift_name)
+        if not shift:
+            message = "Shift with name {} not found for {}".format(shift_name, course_id)
+            return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": message})
+
         try:
             shift_manager.enroll_user(user, shift, forced=True)
         except ValueError as e:
             return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": e.message})
-        return response.Response({})
+        return response.Response({"message": "Success"})
+
+    def get(self, request, course_id):
+        course_key = CourseKey.from_string(course_id)
+        shift_manager = CourseShiftManager(course_key)
+        if not shift_manager.is_enabled:
+            message = "Shifts are not enabled for course {}".format(course_id)
+            return response.Response(status=status.HTTP_406_NOT_ACCEPTABLE, data={"error": message})
+
+        username = request.query_params.get("username")
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            message = "User with username {} not found".format(username)
+            return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": message})
+        current_shift = shift_manager.get_user_shift(user)
+        if not current_shift:
+            return response.Response({})
+        else:
+            data = CourseShiftSerializer(current_shift).data
+            return response.Response(data)
