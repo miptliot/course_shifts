@@ -62,7 +62,10 @@ def get_default_fallback_field_value(block, name):
     This function returns value of block's field
     avoiding recursive entering into the shift provider.
     """
-    fallback = block._field_data._authored_data._source.fallback
+    try: # we have LmsFieldData in block during rendering
+        fallback = block._field_data._authored_data._source.fallback
+    except AttributeError: #we have Kvs or InheritingFieldData in block
+        fallback = block._field_data
     base_value = None
     if fallback.has(block, name):
         base_value = fallback.get(block, name)
