@@ -1,5 +1,9 @@
 """
-Tests for course shifts
+Tests for course shifts.
+Run them by
+    paver test_system -s lms -t <path>/course_shifts/tests/test_shifts.py --settings=test
+
+'course_shifts' must be added to INSTALLED_APPS in test.py
 """
 # pylint: disable=no-member
 import datetime
@@ -155,8 +159,12 @@ class TestCourseShiftGroup(ModuleStoreTestCase):
         self._no_groups_check()
         name = "test_shift_group"
         test_shift_group, created = CourseShiftGroup.create(name, self.course_key)
-        with self.assertRaises(IntegrityError) as context_manager:
+        with self.assertRaises(ValueError) as context_manager:
             test_shift_group2, created2 = CourseShiftGroup.create(name, self.course_key, start_date=date_shifted(1))
+        message_list = ["Shift already exists with different start_date"]
+        message_right = list(x in str(context_manager.exception) for x in message_list)
+        self.assertTrue(all(message_right), "Message:{}".format(str(context_manager.exception)))
+
         self._delete_all_shifts()
 
 
@@ -624,8 +632,11 @@ class TestCourseShiftManager(ModuleStoreTestCase, EnrollClsFields):
 
         test_group = shift_manager.create_shift()
         name = test_group.name
-        with self.assertRaises(IntegrityError):
+        with self.assertRaises(ValueError) as context_manager:
             test_group_error = shift_manager.create_shift(name=name, start_date=date_shifted(1))
+        message_list = ["Shift already exists with different start_date"]
+        message_right = list(x in str(context_manager.exception) for x in message_list)
+        self.assertTrue(all(message_right), "Message:{}".format(str(context_manager.exception)))
 
         test_group2 = shift_manager.create_shift()
         self.assertTrue(test_group == test_group2, "Different groups: {} {}".format(

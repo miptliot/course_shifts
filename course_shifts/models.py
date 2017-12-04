@@ -155,7 +155,7 @@ class CourseShiftGroup(models.Model):
             shift = CourseShiftGroup.objects.get(course_user_group=course_user_group)
             if shift.name != name:
                 raise ValueError("Shift already exists with different name: {}".format(str(shift.name)))
-            if shift.start_date != start_date:
+            if start_date and shift.start_date != start_date:
                 raise ValueError("Shift already exists with different start_date: {}".format(str(shift.start_date)))
         kwargs = {"course_user_group": course_user_group}
         if start_date:

@@ -10,6 +10,9 @@ from openedx.core.lib.api.permissions import ApiKeyHeaderPermission
 
 
 class CourseShiftsPermission(permissions.BasePermission):
+    """
+    Allows staff or api-key users to change shifts.
+    """
     def has_permission(self, request, view):
         return (ApiKeyHeaderPermission().has_permission(request, view) or
             (permissions.IsAuthenticated().has_permission(request, view) and IsStaffOrOwner().has_permission(request,view))
