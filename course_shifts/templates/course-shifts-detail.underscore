@@ -1,0 +1,58 @@
+<div class="course-shifts-detail">
+    <h4 class="hd hd-4"><%- gettext("Shifts Editing View") %></h4>
+    <div id="course-shift-edit-view">
+        <fieldset>
+            <select id="shift-select">
+                <% for (var i = 0; i < shifts_list.length; i++) {
+                    var shift = shifts_list[i];
+                %>
+                    <option value="<%- shift['name'] %>">
+                        <%-shift['name'] %>
+                    </option>
+                <% } %>
+                    <option value="create-new-shift">
+                        CREATE NEW
+                    </option>
+            </select>
+            <br>
+            <div class="shift-info">
+                <input name="course-shift-name" type="text">
+                <label for="course-shift-name"><%- gettext("Name of shift")%> </label>
+                <br>
+                <input name="course-shift-date" type="date" placeholder="YYYY-MM-DD">
+                <label for="course-shift-date"><%- gettext("Start date of shift")%></label>
+                <table>
+                    <tr>
+                        <th scope="row"><%- gettext("Enrollement start")%></th>
+                        <td id="current-shift-enrollement-start"></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><%- gettext("Enrollement finish")%></th>
+                        <td id="current-shift-enrollement-finish"></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><%- gettext("Users in shift")%></th>
+                        <td id="current-shift-users-count"></td>
+                    </tr>
+                 </table>
+            </div>
+
+            <button type="submit" class="btn-blue" id="change-create-shift-button">
+                <%- gettext("Submit") %>
+            </button>
+            <button type="submit" id="delete-shift-button" class="create-shift-disable">
+                <%- gettext("Delete") %>
+            </button>
+        </fieldset>
+    </div>
+    <hr>
+    <div id="course-shift-view-user">
+        <label for="course-shift-username-add" class="hd hd-4"><%- gettext("Add user to selected shift")%> </label>
+        <br>
+        <input name="course-shift-username-add" class="create-shift-disable" type="text" placeholder="Username or email">
+        <br>
+        <button type="submit" id="course-shift-add-user-button" class="create-shift-disable">
+           <%- gettext("Add user") %>
+        </button>
+    </div>
+</div>
