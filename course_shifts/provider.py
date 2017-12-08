@@ -38,6 +38,8 @@ class CourseShiftOverrideProvider(FieldOverrideProvider):
     def get(self, block, name, default):
         if not self.should_shift(block, name):
             return default
+        if unicode(self.user) == u'SystemUser':
+            return default
         course_key = block.location.course_key
         shift_manager = CourseShiftManager(course_key)
 
