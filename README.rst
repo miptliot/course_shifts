@@ -51,3 +51,14 @@ Note that if feature INDIVIDUAL_DUE_DATES is also used, than IndividualStudentOv
 branch from github. Branch is based on edx release 'open-release/ficus.2' (Watch branch `diff
 <https://github.com/edx/edx-platform/compare/open-release/ficus.1...zimka:course_shifts.patch>`_
 ). It contains all necessary changes in edx-platform.
+
+
+5. Update edx-platform static
+::
+
+   paver update_assets lms --settings=YOUR_SETTINGS
+   paver update_assets studio --settings=YOUR_SETTINGS
+
+
+6. Enable feature for chosen course in Studio > your_course > Advanced Settings > Enable Course Shifts.
+After turning on feature can't be disabled.
