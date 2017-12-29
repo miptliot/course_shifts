@@ -5,6 +5,7 @@ from logging import getLogger
 
 from datetime import timedelta
 from django.contrib.auth.models import User
+from django.dispatch import Signal
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models, IntegrityError
@@ -86,6 +87,12 @@ class CourseShiftGroup(models.Model):
         self.days_shift += delta_days
         self.start_date = value
         self.save()
+        shift_membership_changed_signal.send(
+            sender=self.__class__,
+            shift_group=self,
+            specific_username=None,
+            is_deleting=False
+        )
 
     def get_shifted_date(self, user, date):
         """
@@ -172,6 +179,12 @@ class CourseShiftGroup(models.Model):
 
     def delete(self, *args, **kwargs):
         log.info("Shift group is deleted: {}".format(str(self)))
+        shift_membership_changed_signal.send(
+            sender=self.__class__,
+            shift_group=self,
+            specific_username=None,
+            is_deleting=True
+        )
         self.course_user_group.delete()
         return super(CourseShiftGroup, self).delete(*args, **kwargs)
 
@@ -250,7 +263,14 @@ class CourseShiftGroupMembership(models.Model):
         if membership:
             membership.delete()
         if course_shift_group_to:
-            return cls.objects.create(user=user, course_shift_group=course_shift_group_to)
+            result = cls.objects.create(user=user, course_shift_group=course_shift_group_to)
+            shift_membership_changed_signal.send(
+                sender=cls,
+                specific_username=user.username,
+                shift_group=course_shift_group_to,
+                is_deleting=False
+            )
+            return result
 
     @classmethod
     def _push_add_to_group(cls, course_shift_group, user):
@@ -481,3 +501,5 @@ class CourseShiftSettings(models.Model):
         else:
             text += u"manual"
         return text
+
+shift_membership_changed_signal = Signal(providing_args=["shift_group", "specific_username", "is_deleting"])
