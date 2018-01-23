@@ -104,7 +104,11 @@ class CourseShiftGroup(models.Model):
                 user.username,
                 str(self)
             ))
-        return date + timedelta(days=self.days_shift)
+        try:
+            value = date + timedelta(days=self.days_shift)
+            return value
+        except OverflowError:
+            return date
 
     def get_enrollment_limits(self, shift_settings=None):
         """
