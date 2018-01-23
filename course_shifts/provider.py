@@ -28,7 +28,7 @@ class CourseShiftOverrideProvider(FieldOverrideProvider):
     )
     OPENASSESSMENT_NAMES = (
         'due',
-        'submission_due'
+        'submission_due',
         'start',
         'submission_start',
         'rubric_assessments'
@@ -108,6 +108,8 @@ class CourseShiftOverrideProvider(FieldOverrideProvider):
         return True
 
     def shift_string_date(self, base_value, shift_group, name):
+        if not base_value:
+            return base_value
         parsed_value = dateutil.parser.parse(base_value)
         if parsed_value.isoformat() != base_value:
             log.error("CourseShift can't move non-iso 8601 date: {} ({})".format(
@@ -116,7 +118,7 @@ class CourseShiftOverrideProvider(FieldOverrideProvider):
             ))
             return None
         shifted_value = shift_group.get_shifted_date(self.user, parsed_value)
-        return shifted_value.isoformat()
+        return unicode(shifted_value.isoformat())
 
     def shift_rubric_assessment(self, base_value, shift_group, name):
         shifted_rubric_assessment = []
@@ -131,8 +133,6 @@ class CourseShiftOverrideProvider(FieldOverrideProvider):
                 shift_group=shift_group,
                 name=name
             )
-            if (shifted_due is None) or (shifted_start is None):
-                return
             shifted_row = dict(row)
             shifted_row['start'] = shifted_start
             shifted_row['due'] = shifted_due
