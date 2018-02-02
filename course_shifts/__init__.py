@@ -1,7 +1,7 @@
 from django.core.urlresolvers import reverse
 from django.utils.translation import ugettext as _
 
-from .models import CourseShiftSettings, shift_membership_changed_signal
+from .models import CourseShiftSettings
 from .serializers import CourseShiftSettingsSerializer, CourseShiftSerializer
 from .manager import CourseShiftManager
 

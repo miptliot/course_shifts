@@ -5,7 +5,6 @@ from logging import getLogger
 
 from datetime import timedelta
 from django.contrib.auth.models import User
-from django.dispatch import Signal
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models, IntegrityError
@@ -13,6 +12,7 @@ from django.utils import timezone
 from opaque_keys.edx.keys import CourseKey
 from openedx.core.djangoapps.course_groups.models import CourseUserGroup, CourseKeyField
 from xmodule.modulestore.django import modulestore
+from open_edx_api_extension import get_model_tracking_mixin, track_methods
 
 log = getLogger(__name__)
 
@@ -21,7 +21,7 @@ def date_now():
     return timezone.now().date()
 
 
-class CourseShiftGroup(models.Model):
+class CourseShiftGroup(get_model_tracking_mixin(forced_keys=("course_key","name")), models.Model):
     """
     Represents group of users with shifted due dates.
     It is based on CourseUserGroup. To ensure that
@@ -68,15 +68,6 @@ class CourseShiftGroup(models.Model):
     def settings(self, value):
         self._shift_settings = value
 
-    def set_name(self, value):
-        if self.name == value:
-            return
-        same_name_shifts = CourseShiftGroup.objects.filter(course_key=self.course_key, course_user_group__name=value)
-        if same_name_shifts.first():
-            raise ValueError("Shift with name {} already exists for {}".format(value, str(self.course_key)))
-        self.course_user_group.name = value
-        self.course_user_group.save()
-
     def set_start_date(self, value):
         if self.start_date == value:
             return
@@ -87,12 +78,6 @@ class CourseShiftGroup(models.Model):
         self.days_shift += delta_days
         self.start_date = value
         self.save()
-        shift_membership_changed_signal.send(
-            sender=self.__class__,
-            shift_group=self,
-            specific_username=None,
-            is_deleting=False
-        )
 
     def get_shifted_date(self, user, date):
         """
@@ -183,12 +168,6 @@ class CourseShiftGroup(models.Model):
 
     def delete(self, *args, **kwargs):
         log.info("Shift group is deleted: {}".format(str(self)))
-        shift_membership_changed_signal.send(
-            sender=self.__class__,
-            shift_group=self,
-            specific_username=None,
-            is_deleting=True
-        )
         self.course_user_group.delete()
         return super(CourseShiftGroup, self).delete(*args, **kwargs)
 
@@ -203,6 +182,7 @@ class CourseShiftGroup(models.Model):
         return super(CourseShiftGroup, self).save(*args, **kwargs)
 
 
+@track_methods(["transfer_user"])
 class CourseShiftGroupMembership(models.Model):
     """
     Represents membership in CourseShiftGroup. At any changes it
@@ -240,10 +220,10 @@ class CourseShiftGroupMembership(models.Model):
         """
 
         if not course_shift_group_to and not course_shift_group_from:
-            return
+            return False
 
         if course_shift_group_from == course_shift_group_to:
-            return
+            return False
 
         key_from = course_shift_group_from and course_shift_group_from.course_key
         key_to = course_shift_group_to and course_shift_group_to.course_key
@@ -267,14 +247,8 @@ class CourseShiftGroupMembership(models.Model):
         if membership:
             membership.delete()
         if course_shift_group_to:
-            result = cls.objects.create(user=user, course_shift_group=course_shift_group_to)
-            shift_membership_changed_signal.send(
-                sender=cls,
-                specific_username=user.username,
-                shift_group=course_shift_group_to,
-                is_deleting=False
-            )
-            return result
+                cls.objects.create(user=user, course_shift_group=course_shift_group_to)
+        return True
 
     @classmethod
     def _push_add_to_group(cls, course_shift_group, user):
@@ -342,7 +316,9 @@ class CourseShiftGroupMembership(models.Model):
         )
 
 
-class CourseShiftSettings(models.Model):
+class CourseShiftSettings(
+    get_model_tracking_mixin(forced_keys=("course_key", "enroll_before_days", "enroll_after_days")),
+    models.Model):
     """
     Describes Course Shift settings for start and due dates in the specific course run.
     """
@@ -505,5 +481,3 @@ class CourseShiftSettings(models.Model):
         else:
             text += u"manual"
         return text
-
-shift_membership_changed_signal = Signal(providing_args=["shift_group", "specific_username", "is_deleting"])
