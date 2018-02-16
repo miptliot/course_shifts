@@ -143,10 +143,12 @@ class CourseShiftDetailView(views.APIView):
             return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": serial.error_dict()})
         try:
             data = serial.validated_data
-            if data["start_date"]:
+            if data["name"] != shift.name:
+                message = "Shift name can't be changed. You can delete shift and create new one."
+                return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": message})
+
+            if data["start_date"] != shift.start_date:
                 shift.set_start_date(data["start_date"])
-            if data["name"]:
-                shift.set_name(data["name"])
         except ValueError as e:
             return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": e.message})
         return response.Response({})

@@ -1,5 +1,6 @@
 <div class="course-shifts-detail">
     <h4 class="hd hd-4"><%- gettext("Shifts Editing View") %></h4>
+    <h5 class="hd hd-5"><%- gettext("Disclaimer: shift names changes won't be really saved") %></h4>
     <div id="course-shift-edit-view">
         <fieldset>
             <select id="shift-select">

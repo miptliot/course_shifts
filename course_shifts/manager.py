@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from django.conf import settings
+from django.core.cache import cache
 from django.utils import timezone
 from .models import CourseShiftGroup, CourseShiftGroupMembership, CourseShiftSettings
 from .serializers import CourseShiftSettingsSerializer
@@ -15,10 +16,31 @@ class CourseShiftManager(object):
     data about available shifts. Supposed to be used outside the app in edx
     """
     SHIFT_COURSE_FIELD_NAME = "enable_course_shifts"
+    SETTINGS_CACHE = {
+        "key":'CourseShiftSettings_{course_id}',
+        "timeout": 300
+    }
+    MEMBERSHIP_CACHE = {
+        "key": 'CourseShiftGroupMembership_{course_id}_{username}',
+        "timeout": 300
+    }
 
     def __init__(self, course_key):
         self.course_key = course_key
-        self.settings = CourseShiftSettings.get_course_settings(self.course_key)
+
+    @property
+    def settings(self):
+        if hasattr(self, '_settings'):
+            return self._settings
+        cache_key = self.SETTINGS_CACHE['key'].format(course_id=str(self.course_key))
+        cached_settings = cache.get(cache_key)
+        if cached_settings:
+            self._settings = cached_settings
+            return cached_settings
+
+        self._settings = CourseShiftSettings.get_course_settings(self.course_key)
+        cache.set(cache_key, self._settings, self.SETTINGS_CACHE['timeout'])
+        return self._settings
 
     @property
     def is_enabled(self):
@@ -39,9 +61,21 @@ class CourseShiftManager(object):
         if not self.is_enabled:
             return
 
-        membership = CourseShiftGroupMembership.get_user_membership(user, self.course_key)
-        if membership:
-            return membership.course_shift_group
+        cache_key = self.MEMBERSHIP_CACHE['key'].format(
+            course_id=str(self.course_key),
+            username=user.username
+        )
+        cached_membership = cache.get(cache_key)
+        if cached_membership:
+            if isinstance(cached_membership, str):
+                # next is always True, left for readability
+                if cached_membership == 'None':
+                    return None
+            return cached_membership.course_shift_group
+
+        membership = CourseShiftGroupMembership.get_user_membership(user, self.course_key) or 'None'
+        cache.set(cache_key, membership, self.MEMBERSHIP_CACHE['timeout'])
+        return getattr(membership, 'course_shift_group', None)
 
     def get_all_shifts(self):
         return CourseShiftGroup.get_course_shifts(self.course_key)
