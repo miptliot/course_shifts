@@ -99,7 +99,6 @@ class CourseShiftManager(object):
         if not all_shifts:
             return []
 
-        now = date_now()
         active_shifts = []
         current_start_date = None
         if user:
@@ -107,16 +106,16 @@ class CourseShiftManager(object):
             current_start_date = current_shift and current_shift.start_date
 
         for shift in all_shifts:
-            enroll_start = shift.start_date - timedelta(days=self.settings.enroll_before_days)
-            enroll_finish = shift.start_date + timedelta(days=self.settings.enroll_after_days)
-            if current_start_date and current_start_date < shift.start_date:
-                # If user is in group 'current_shift,' which is older than given 'shift',
-                # then all groups later than 'current' are available for user.
-                # This means that enroll_finish for this shift should be ignored.
-                # Because later enroll_finish is compared with 'now', it is replaced
-                # by 'now' to pass the check successfully anyway
-                enroll_finish = now
-            if enroll_start < now <= enroll_finish:
+            # There are 2 cases when shift is active:
+            # 1. Shift is enrollable now
+            # 2. All together are true:
+            #    a. User has current_shift
+            #    b. current_shift older than shift
+            #    c. shift has already started
+
+            shift_is_enrollable = shift.is_enrollable_now()
+            shift_is_old_for_user = current_start_date and current_start_date <= shift.start_date and shift.is_started()
+            if shift_is_enrollable or shift_is_old_for_user:
                 active_shifts.append(shift)
 
         return active_shifts

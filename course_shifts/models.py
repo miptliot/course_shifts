@@ -111,9 +111,12 @@ class CourseShiftGroup(get_model_tracking_mixin(forced_keys=("course_key","name"
         if not shift_settings:
             shift_settings = self.settings
         date_start, date_end = self.get_enrollment_limits(shift_settings)
-        if date_start < date_now() < date_end:
+        if date_start <= date_now() <= date_end:
             return True
         return False
+
+    def is_started(self):
+        return self.start_date <= date_now()
 
     @classmethod
     def get_course_shifts(cls, course_key):
