@@ -1,5 +1,3 @@
-from datetime import timedelta
-
 from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
@@ -18,11 +16,11 @@ class CourseShiftManager(object):
     SHIFT_COURSE_FIELD_NAME = "enable_course_shifts"
     SETTINGS_CACHE = {
         "key": 'CourseShiftSettings_{course_id}',
-        "timeout": 300
+        "timeout": getattr(settings, "COURSE_SHIFTS_CACHE_TIMEOUT", 300)
     }
     MEMBERSHIP_CACHE = {
         "key": 'CourseShiftGroupMembership_{course_id}_{username}',
-        "timeout": 300
+        "timeout": getattr(settings, "COURSE_SHIFTS_CACHE_TIMEOUT", 300)
     }
 
     def __init__(self, course_key):
@@ -49,6 +47,9 @@ class CourseShiftManager(object):
             course_key = serial_shift_settings.validated_data['course_key']
             instance = CourseShiftSettings.get_course_settings(course_key)
             serial_shift_settings.update(instance, serial_shift_settings.validated_data)
+
+            cache_key = self.SETTINGS_CACHE['key'].format(course_id=str(self.course_key))
+            cache.delete(cache_key)
             return []
         else:
             errors = serial_shift_settings.errors
@@ -174,7 +175,14 @@ class CourseShiftManager(object):
                 str(shift),
                 str(active_shifts)
             ))
-        return CourseShiftGroupMembership.transfer_user(user, shift_from, shift)
+        transferred = CourseShiftGroupMembership.transfer_user(user, shift_from, shift)
+        if transferred:
+            cache_key = self.MEMBERSHIP_CACHE['key'].format(
+                course_id=str(self.course_key),
+                username=user.username
+            )
+            cache.delete(cache_key)
+        return transferred
 
     def create_shift(self, start_date=None, name=None):
         """

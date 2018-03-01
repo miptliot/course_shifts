@@ -534,7 +534,7 @@ class TestCourseShiftManager(ModuleStoreTestCase, EnrollClsFields):
         self.assertFalse(shift_group, "User shift group is {}, should be None".format(str(shift_group)))
 
         test_a_shift_group, created = CourseShiftGroup.create("test_shift_group_t1", self.course_key)
-        CourseShiftGroupMembership.transfer_user(user, None, test_a_shift_group)
+        shift_manager.enroll_user(user, test_a_shift_group)
         shift_group = shift_manager.get_user_shift(user)
         self.assertTrue(shift_group == test_a_shift_group, "User shift group is {}, should be {}".format(
             str(shift_group),
@@ -691,7 +691,7 @@ class TestCourseShiftManager(ModuleStoreTestCase, EnrollClsFields):
             str(active_user_groups)
         ))
 
-        CourseShiftGroupMembership.transfer_user(self.user, None, group2)
+        shift_manager.enroll_user(self.user, group2, forced=True)
         active_user_groups = shift_manager.get_active_shifts(self.user)
         correct = len(active_user_groups) == 1 and group in active_user_groups
         self.assertTrue(correct, "Active user groups: {}".format(
@@ -710,7 +710,7 @@ class TestCourseShiftManager(ModuleStoreTestCase, EnrollClsFields):
         self._no_groups_check()
         shift_manager = CourseShiftManager(self.course_key)
         group = shift_manager.create_shift(start_date=date_shifted(-1))
-        CourseShiftGroupMembership.transfer_user(self.user, None, group)
+        shift_manager.enroll_user(self.user, group, forced=True)
 
         group_future = shift_manager.create_shift(start_date=date_shifted(14))
 
