@@ -17,7 +17,7 @@ class CourseShiftManager(object):
     """
     SHIFT_COURSE_FIELD_NAME = "enable_course_shifts"
     SETTINGS_CACHE = {
-        "key":'CourseShiftSettings_{course_id}',
+        "key": 'CourseShiftSettings_{course_id}',
         "timeout": 300
     }
     MEMBERSHIP_CACHE = {
@@ -41,6 +41,23 @@ class CourseShiftManager(object):
         self._settings = CourseShiftSettings.get_course_settings(self.course_key)
         cache.set(cache_key, self._settings, self.SETTINGS_CACHE['timeout'])
         return self._settings
+
+    def update_settings(self, settings_fields_data):
+        settings_fields_data['course_key'] = str(self.course_key)
+        serial_shift_settings = CourseShiftSettingsSerializer(data=settings_fields_data, partial=True)
+        if serial_shift_settings.is_valid():
+            course_key = serial_shift_settings.validated_data['course_key']
+            instance = CourseShiftSettings.get_course_settings(course_key)
+            serial_shift_settings.update(instance, serial_shift_settings.validated_data)
+            return []
+        else:
+            errors = serial_shift_settings.errors
+            errors_by_key = []
+            for key in errors.keys():
+                if not errors[key]:
+                    continue
+                errors_by_key.append(u"{}:{}".format(key, ",".join(errors[key])))
+            return errors_by_key
 
     @property
     def is_enabled(self):
