@@ -112,7 +112,9 @@ class CourseShiftManager(object):
             #    a. User has current_shift
             #    b. current_shift older than shift
             #    c. shift has already started
-
+            if current_start_date == shift.start_date:
+                # same shift
+                continue
             shift_is_enrollable = shift.is_enrollable_now()
             shift_is_old_for_user = current_start_date and current_start_date <= shift.start_date and shift.is_started()
             if shift_is_enrollable or shift_is_old_for_user:

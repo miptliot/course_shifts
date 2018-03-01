@@ -207,12 +207,16 @@ class TestCourseShiftGroupMembership(ModuleStoreTestCase):
         """
         Tests membership deletion and transfer to None removes user from Group
         """
-        membership = CourseShiftGroupMembership.transfer_user(self.user, None, self.group)
+        transferred = CourseShiftGroupMembership.transfer_user(self.user, None, self.group)
+        self.assertEqual(transferred , True)
+        membership = CourseShiftGroupMembership.get_user_membership(self.user, self.course_key)
         membership.delete()
         self.assertTrue(len(self.group.users.all()) == 0)
 
-        membership = CourseShiftGroupMembership.transfer_user(self.user, None, self.group)
-        CourseShiftGroupMembership.transfer_user(self.user, self.group, None)
+        transferred = CourseShiftGroupMembership.transfer_user(self.user, None, self.group)
+        self.assertEqual(transferred, True)
+        transferred = CourseShiftGroupMembership.transfer_user(self.user, self.group, None)
+        self.assertEqual(transferred, True)
         self.assertTrue(len(self.group.users.all()) == 0)
 
     def test_membership_course_user_unique(self):
@@ -257,8 +261,10 @@ class TestCourseShiftGroupMembership(ModuleStoreTestCase):
         """
         Tests that membership can't be changed
         """
-        membership = CourseShiftGroupMembership.transfer_user(self.user, None, self.group)
+        transferred = CourseShiftGroupMembership.transfer_user(self.user, None, self.group)
+        self.assertEqual(transferred, True)
         group2, created = CourseShiftGroup.create("test_shift_group2", self.second_course_key)
+        membership = CourseShiftGroupMembership.get_user_membership(self.user, self.course_key)
         membership.course_shift_group = group2
         with self.assertRaises(ValueError):
             membership.save()
