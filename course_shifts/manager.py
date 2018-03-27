@@ -140,7 +140,7 @@ class CourseShiftManager(object):
 
         return active_shifts
 
-    def enroll_user(self, user, shift, forced=False):
+    def enroll_user(self, user, shift, requester=None, forced=False):
         """
         Enrolls user on given shift. If user is enrolled on other shift,
         his current shift membership canceled. If shift is None only current membership
@@ -153,7 +153,8 @@ class CourseShiftManager(object):
                 str(shift.course_key),
                 str(self.course_key)
             ))
-
+        if requester and requester.is_staff:
+            forced = True
         membership = CourseShiftGroupMembership.get_user_membership(
             user=user,
             course_key=self.course_key
@@ -175,7 +176,7 @@ class CourseShiftManager(object):
                 str(shift),
                 str(active_shifts)
             ))
-        transferred = CourseShiftGroupMembership.transfer_user(user, shift_from, shift)
+        transferred = CourseShiftGroupMembership.transfer_user(user, shift_from, shift, requester=requester)
         if transferred:
             cache_key = self.MEMBERSHIP_CACHE['key'].format(
                 course_id=str(self.course_key),

@@ -215,7 +215,7 @@ class CourseShiftGroupMembership(models.Model):
         return course_membership
 
     @classmethod
-    def transfer_user(cls, user, course_shift_group_from, course_shift_group_to):
+    def transfer_user(cls, user, course_shift_group_from, course_shift_group_to, requester=None):
         """
         Transfers user from one shift to another one. If the first one is None,
         user is enrolled in the 'course_shift_group_to'. If the last one

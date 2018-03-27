@@ -203,7 +203,7 @@ class CourseShiftUserView(views.APIView):
             return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": message})
 
         try:
-            shift_manager.enroll_user(user, shift, forced=True)
+            shift_manager.enroll_user(user, shift, requester=request.user)
         except ValueError as e:
             return response.Response(status=status.HTTP_400_BAD_REQUEST, data={"error": e.message})
         return response.Response({"message": "Success"})
